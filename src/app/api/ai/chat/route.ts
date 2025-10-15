@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`Processing chat question${userId ? ` for user ${userId}` : ''}: ${question.substring(0, 50)}...`);
+    // Processing chat question for user
 
     // Generate AI response with user-specific caching
     const result = await aiChatbotAssistance({ pdfDataUri, question }, userId);

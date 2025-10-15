@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`Generating quiz questions${userId ? ` for user ${userId}` : ''}`);
+    // Generating quiz questions for user
 
     // Generate quiz questions with user-specific caching
     const result = await generateQuizQuestions({ pdfDataUri }, userId);

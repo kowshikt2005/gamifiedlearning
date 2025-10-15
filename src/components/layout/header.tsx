@@ -26,7 +26,6 @@ import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useAuth } from '@/contexts/auth-context';
 
 export function Header() {
-  const router = useRouter();
   const { user, logout } = useAuth();
   const userAvatar = PlaceHolderImages.find(img => img.id === 'user-avatar') || {
     id: 'fallback',

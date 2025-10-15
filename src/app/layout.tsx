@@ -5,7 +5,7 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { GamificationProvider } from '@/contexts/gamification-context';
 import { Analytics } from "@vercel/analytics/next";
 import { ErrorBoundary } from '@/components/error-boundary';
-import { ChunkErrorBoundary } from '@/components/chunk-error-boundary';                                                                  
+// Removed unused import                                                                  
 export const metadata: Metadata = {
   title: 'StudyMaster AI',
   description: 'AI-powered gamified learning platform',

@@ -11,7 +11,6 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, ArrowLeft, ArrowRight, Lightbulb, Coins, Trophy, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { generateQuizQuestions } from '@/ai/flows/generate-quiz-questions-from-pdf';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 

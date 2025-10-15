@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, Send, MessageSquare, AlertTriangle, Sparkles, Zap, Star, Lightbulb, Timer, Play, Pause } from 'lucide-react';
-import { aiChatbotAssistanceStream } from '@/ai/flows/ai-chatbot-assistance';
 import { Logo } from '../icons';
 import { useGamification } from '@/contexts/gamification-context';
 import { useStudySession } from '@/contexts/study-session-context';

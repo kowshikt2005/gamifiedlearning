@@ -14,7 +14,10 @@
     "app/api/upload/**/*.ts": {
       "maxDuration": 300
     },
-    "ai/flows/**/*.ts": {
+    "app/api/quiz/**/*.ts": {
+      "maxDuration": 300
+    },
+    "app/api/ai/**/*.ts": {
       "maxDuration": 300
     }
   },
