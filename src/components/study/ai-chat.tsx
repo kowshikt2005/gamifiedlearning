@@ -59,50 +59,96 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
             // Create abort controller for cancellation
             abortControllerRef.current = new AbortController();
             
-            // Get streaming response
-            const chunks = await aiChatbotAssistanceStream({ pdfDataUri, question: input });
+            // Get auth token for user-specific caching
+            const token = localStorage.getItem('auth-token');
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+            };
             
-            // Build the response progressively
-            let accumulatedResponse = '';
-            setStreamingMessage('');
-            
-            for (const chunk of chunks) {
-                // Check if operation was cancelled
-                if (abortControllerRef.current?.signal.aborted) break;
-                
-                accumulatedResponse += chunk;
-                setStreamingMessage(accumulatedResponse);
-                
-                // Small delay to simulate streaming
-                await new Promise(resolve => setTimeout(resolve, 20));
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
             }
+
+            // Call the new API endpoint
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ pdfDataUri, question: input }),
+                signal: abortControllerRef.current.signal,
+            });
+
+            const result = await response.json();
             
-            // Add final bot message if not cancelled
-            if (!abortControllerRef.current?.signal.aborted) {
-                const botMessage: Message = { role: 'bot', content: accumulatedResponse };
-                setMessages(prev => [...prev, botMessage]);
+            if (result.success || result.answer) {
+                const answer = result.answer;
+                
+                // Simulate streaming effect
+                let accumulatedResponse = '';
                 setStreamingMessage('');
                 
-                // Gamification: Add points and update quest progress
-                const pointsEarned = 5 + Math.floor(accumulatedResponse.length / 100); // Bonus points for longer responses
-                addPoints(pointsEarned);
-                questionCountRef.current += 1;
-                checkQuestProgress('ai-chat-10', 1);
+                const chunks = [];
+                for (let i = 0; i < answer.length; i += 5) {
+                    chunks.push(answer.slice(i, i + 5));
+                }
                 
-                // Update streak
-                setStreak(prev => prev + 1);
+                for (const chunk of chunks) {
+                    // Check if operation was cancelled
+                    if (abortControllerRef.current?.signal.aborted) break;
+                    
+                    accumulatedResponse += chunk;
+                    setStreamingMessage(accumulatedResponse);
+                    
+                    // Small delay to simulate streaming
+                    await new Promise(resolve => setTimeout(resolve, 20));
+                }
                 
-                // Show coin collection animation
-                const coinElement = document.createElement('div');
-                coinElement.innerHTML = `<Coins class="h-6 w-6 text-yellow-500 fill-yellow-500 animate-coinCollect" />`;
-                coinElement.className = 'absolute top-0 right-0';
-                document.querySelector('.chat-header')?.appendChild(coinElement);
-                setTimeout(() => coinElement.remove(), 1000);
+                // Add final bot message if not cancelled
+                if (!abortControllerRef.current?.signal.aborted) {
+                    const botMessage: Message = { role: 'bot', content: answer };
+                    setMessages(prev => [...prev, botMessage]);
+                    setStreamingMessage('');
+                    
+                    // Gamification: Add points and update quest progress
+                    const pointsEarned = 5 + Math.floor(answer.length / 100); // Bonus points for longer responses
+                    addPoints(pointsEarned);
+                    questionCountRef.current += 1;
+                    checkQuestProgress('chat-10', 1);
+                    
+                    // Update streak
+                    setStreak(prev => prev + 1);
+                    
+                    // Show success feedback if there was an error but we got a fallback
+                    if (result.error) {
+                        const errorMessage: Message = { 
+                            role: 'error', 
+                            content: `Note: ${result.error}` 
+                        };
+                        setMessages(prev => [...prev, errorMessage]);
+                    }
+                }
+            } else {
+                throw new Error(result.error || 'Failed to get AI response');
             }
         } catch (error) {
-            console.error(error);
-            const errorMessage: Message = { role: 'error', content: "Sorry, I encountered an error. Please try again. 😔" };
-            setMessages(prev => [...prev, errorMessage]);
+            console.error('AI Chat error:', error);
+            
+            if (error instanceof Error && error.name === 'AbortError') {
+                // Request was cancelled
+                return;
+            }
+            
+            let errorMessage = "Sorry, I encountered an error. Please try again. 😔";
+            
+            if (error instanceof Error) {
+                if (error.message.includes('timeout')) {
+                    errorMessage = "I'm taking too long to respond. Please try a simpler question. 🕐";
+                } else if (error.message.includes('PDF')) {
+                    errorMessage = "I'm having trouble reading the document. Please make sure it loaded properly. 📄";
+                }
+            }
+            
+            const errorMsg: Message = { role: 'error', content: errorMessage };
+            setMessages(prev => [...prev, errorMsg]);
             setStreamingMessage('');
         } finally {
             setIsLoading(false);

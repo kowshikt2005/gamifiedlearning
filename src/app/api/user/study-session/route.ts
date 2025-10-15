@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AtlasUserService } from '@/lib/services/atlas-user-service';
 import { StudySession } from '@/lib/models/user';
 import { QuizAnswer } from '@/lib/database-utils';
+import { getDatabase } from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 // @ts-ignore
 import jwt from 'jsonwebtoken';
 
@@ -20,6 +22,21 @@ async function getUserFromToken(request: NextRequest) {
   };
 
   return decoded.userId;
+}
+
+async function getSessionCount(userId: string): Promise<number> {
+  try {
+    const db = await getDatabase();
+    const tasks = db.collection('tasks');
+    const count = await tasks.countDocuments({ 
+      userId: new ObjectId(userId), 
+      status: 'completed' 
+    });
+    return count;
+  } catch (error) {
+    console.error('Failed to get session count:', error);
+    return 0;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -44,47 +61,76 @@ export async function POST(request: NextRequest) {
 
     await AtlasUserService.addStudySession(userId, studySession);
 
-    // Check for achievements and badges
-    const user = await AtlasUserService.getUserById(userId);
-    if (user && user.progress) {
-      // Check for first session achievement
-      if (user.progress.studySessions && user.progress.studySessions.length === 1) {
-        await AtlasUserService.updateAchievement(userId, 'first-session', true);
-      }
+    // Process achievements and badges after session is saved
+    try {
+      const user = await AtlasUserService.getUserById(userId);
+      if (user && user.progress) {
+        const achievements = [];
+        const badges = [];
+        
+        // Get current session count from database
+        const sessionCount = await getSessionCount(userId);
+        
+        // Check for first session achievement
+        if (sessionCount === 1) {
+          achievements.push('first-session');
+          badges.push('first-quiz');
+        }
 
-      // Check for marathon study achievement (2 hours in one session)
-      if (studySession.duration >= 120) {
-        await AtlasUserService.updateAchievement(userId, 'marathon-study', true);
-      }
+        // Check for marathon study achievement (2 hours in one session)
+        if (studySession.duration >= 120) {
+          achievements.push('marathon-study');
+        }
 
-      // Check for perfect score badge
-      if (sessionData.score === 100) {
-        await AtlasUserService.updateBadge(userId, 'perfect-score', true);
-      }
+        // Check for perfect score badge
+        if (studySession.score === 100) {
+          badges.push('perfect-score');
+        }
 
-      // Check for first quiz badge
-      if (user.progress.studySessions && user.progress.studySessions.length === 1) {
-        await AtlasUserService.updateBadge(userId, 'first-quiz', true);
-      }
+        // Check for scholar badge (10 quizzes)
+        if (sessionCount >= 10) {
+          badges.push('scholar');
+        }
 
-      // Update quest progress
-      await AtlasUserService.updateQuest(userId, 'study-60', studySession.duration);
-      await AtlasUserService.updateQuest(userId, 'quiz-5', 1);
+        // Check for points badge (after points are updated)
+        const updatedUser = await AtlasUserService.getUserById(userId);
+        if (updatedUser && updatedUser.progress && updatedUser.progress.points >= 100) {
+          badges.push('points-100');
+        }
 
-      // Check for points badge
-      if (user.progress.points >= 100) {
-        await AtlasUserService.updateBadge(userId, 'points-100', true);
-      }
+        // Check for streak badges
+        if (updatedUser && updatedUser.progress && updatedUser.progress.streak >= 7) {
+          badges.push('streak-7');
+        }
 
-      // Check for scholar badge (10 quizzes)
-      if (user.progress.studySessions && user.progress.studySessions.length >= 10) {
-        await AtlasUserService.updateBadge(userId, 'scholar', true);
-      }
+        // Update achievements and badges
+        for (const achievementId of achievements) {
+          try {
+            await AtlasUserService.updateAchievement(userId, achievementId, true);
+          } catch (error) {
+            console.warn(`Failed to update achievement ${achievementId}:`, error);
+          }
+        }
 
-      // Check for streak badges
-      if (user.progress.streak >= 7) {
-        await AtlasUserService.updateBadge(userId, 'streak-7', true);
+        for (const badgeId of badges) {
+          try {
+            await AtlasUserService.updateBadge(userId, badgeId, true);
+          } catch (error) {
+            console.warn(`Failed to update badge ${badgeId}:`, error);
+          }
+        }
+
+        // Update quest progress
+        try {
+          await AtlasUserService.updateQuest(userId, 'study-60', studySession.duration);
+          await AtlasUserService.updateQuest(userId, 'quiz-5', 1);
+        } catch (error) {
+          console.warn('Failed to update quest progress:', error);
+        }
       }
+    } catch (error) {
+      console.warn('Achievement processing failed (session still saved):', error);
+      // Don't fail the entire request if achievements fail
     }
 
     return NextResponse.json({

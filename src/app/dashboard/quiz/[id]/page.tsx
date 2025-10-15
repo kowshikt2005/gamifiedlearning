@@ -41,16 +41,66 @@ export default function QuizPage() {
         const fetchQuestions = async () => {
             setIsLoading(true);
             try {
-                const result = await generateQuizQuestions({ pdfDataUri: taskInfo.dataUri! });
-                setContextQuizQuestions(result.questions);
+                const token = localStorage.getItem('auth-token');
+                const headers: HeadersInit = {
+                    'Content-Type': 'application/json',
+                };
+                
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch('/api/quiz/generate', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ pdfDataUri: taskInfo.dataUri }),
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    setContextQuizQuestions(result.questions);
+                    if (result.fallback) {
+                        toast({
+                            title: 'Using Fallback Questions',
+                            description: 'AI generation failed, but we have backup questions for you!',
+                        });
+                    }
+                } else {
+                    throw new Error(result.error || 'Failed to generate questions');
+                }
             } catch (error) {
                 console.error("Failed to generate quiz questions:", error);
                 toast({
                     variant: 'destructive',
                     title: 'Quiz Generation Failed',
-                    description: 'Could not generate questions. Please try again.',
+                    description: error instanceof Error ? error.message : 'Could not generate questions. Please try again.',
                 });
-                router.back();
+                
+                // Use fallback questions instead of going back
+                const fallbackQuestions = [
+                    {
+                        question: "What is the main topic of this document?",
+                        options: ["Technology", "Science", "Business", "Education"],
+                        answer: "Education"
+                    },
+                    {
+                        question: "Based on the content, what would be a key takeaway?",
+                        options: ["Understanding concepts", "Memorizing facts", "Following procedures", "Analyzing data"],
+                        answer: "Understanding concepts"
+                    },
+                    {
+                        question: "What type of document format is this?",
+                        options: ["Research paper", "Textbook chapter", "Manual", "Report"],
+                        answer: "Textbook chapter"
+                    }
+                ];
+                setContextQuizQuestions(fallbackQuestions);
+                
+                toast({
+                    title: 'Using Backup Questions',
+                    description: 'We\'ve loaded some general questions for you to practice with.',
+                });
             } finally {
                 setIsLoading(false);
             }

@@ -290,16 +290,43 @@ export default function StudyPage() {
                             </CardHeader>
                             <CardContent className="h-full p-0 relative rounded-b-xl bg-gradient-to-b from-background to-muted/20">
                                 {taskInfo.dataUri ? (
-                                    <object 
-                                        data={taskInfo.dataUri} 
-                                        type="application/pdf" 
-                                        className="h-full w-full rounded-b-xl"
-                                    >
-                                        <p className="p-4">PDF viewer is not available. You can download the PDF <a href={taskInfo.dataUri} download className="text-primary underline">here</a>.</p>
-                                    </object>
+                                    <div className="h-full w-full relative">
+                                        <object 
+                                            data={taskInfo.dataUri} 
+                                            type="application/pdf" 
+                                            className="h-full w-full rounded-b-xl"
+                                        >
+                                            <div className="flex flex-col items-center justify-center h-full p-8 space-y-4">
+                                                <div className="text-center">
+                                                    <h3 className="text-lg font-semibold mb-2">PDF Viewer Not Available</h3>
+                                                    <p className="text-muted-foreground mb-4">
+                                                        Your browser doesn't support embedded PDF viewing, but you can still use all study features.
+                                                    </p>
+                                                    <div className="space-y-2">
+                                                        <Button asChild variant="outline">
+                                                            <a href={taskInfo.dataUri} download={taskInfo.name} className="flex items-center gap-2">
+                                                                📄 Download PDF
+                                                            </a>
+                                                        </Button>
+                                                        <p className="text-sm text-muted-foreground">
+                                                            You can still generate flashcards and use AI chat features!
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </object>
+                                        
+                                        {/* PDF Loading Indicator */}
+                                        <div className="absolute top-2 right-2 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full flex items-center gap-1">
+                                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                                            <span className="text-xs text-green-700 dark:text-green-300">PDF Loaded</span>
+                                        </div>
+                                    </div>
                                 ) : (
-                                    <div className="flex items-center justify-center h-full">
+                                    <div className="flex flex-col items-center justify-center h-full space-y-4">
+                                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                         <p className="text-muted-foreground">Loading document...</p>
+                                        <p className="text-sm text-muted-foreground">This may take a moment for large files</p>
                                     </div>
                                 )}
                             </CardContent>

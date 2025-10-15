@@ -30,35 +30,74 @@ const GenerateQuizQuestionsOutputSchema = z.object({
 });
 export type GenerateQuizQuestionsOutput = z.infer<typeof GenerateQuizQuestionsOutputSchema>;
 
-// Simple in-memory cache for AI responses
+// User-specific cache for AI responses to prevent cross-user contamination
 interface CachedQuizResult {
   data: GenerateQuizQuestionsOutput;
   timestamp: number;
+  userId?: string;
 }
 const quizCache = new Map<string, CachedQuizResult>();
 
-export async function generateQuizQuestions(input: GenerateQuizQuestionsInput): Promise<GenerateQuizQuestionsOutput> {
+export async function generateQuizQuestions(input: GenerateQuizQuestionsInput, userId?: string): Promise<GenerateQuizQuestionsOutput> {
+  // Create user-specific cache key to prevent cross-user issues
+  const cacheKey = userId ? `${userId}-${input.pdfDataUri}` : input.pdfDataUri;
+  
   // Check cache first
-  if (quizCache.has(input.pdfDataUri)) {
-    const cached = quizCache.get(input.pdfDataUri);
+  if (quizCache.has(cacheKey)) {
+    const cached = quizCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minutes TTL
       return cached.data;
     } else {
       // Expired, remove from cache
-      quizCache.delete(input.pdfDataUri);
+      quizCache.delete(cacheKey);
     }
   }
 
-  // Generate new questions
-  const result = await generateQuizQuestionsFlow(input);
-  
-  // Cache the result
-  quizCache.set(input.pdfDataUri, {
-    data: result,
-    timestamp: Date.now()
-  });
-  
-  return result;
+  try {
+    // Generate new questions with timeout protection
+    const result = await Promise.race([
+      generateQuizQuestionsFlow(input),
+      new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Quiz generation timeout')), 4 * 60 * 1000) // 4 minute timeout
+      )
+    ]);
+    
+    // Cache the result with user info
+    quizCache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now(),
+      userId
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Quiz generation failed:', error);
+    
+    // Return fallback questions if generation fails
+    const fallbackQuestions = generateFallbackQuestions();
+    return { questions: fallbackQuestions };
+  }
+}
+
+// Fallback questions for when AI generation fails
+function generateFallbackQuestions(): Array<{question: string; options: string[]; answer: string}> {
+  return [
+    {
+      question: "What is the main topic of this document?",
+      options: ["Technology", "Science", "Business", "Education"],
+      answer: "Education"
+    },
+    {
+      question: "Based on the content, what would be a key takeaway?",
+      options: ["Understanding concepts", "Memorizing facts", "Following procedures", "Analyzing data"],
+      answer: "Understanding concepts"
+    },
+    {
+      question: "What type of document format is this?",
+      options: ["Research paper", "Textbook chapter", "Manual", "Report"],
+      answer: "Textbook chapter"
+    }
+  ];
 }
 
 const prompt = ai.definePrompt({
