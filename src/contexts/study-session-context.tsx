@@ -142,7 +142,7 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
                 timerIntervalRef.current = null;
             }
         };
-    }, [timerState.isActive, studyDuration]);
+    }, [timerState.isActive, timerState.timeRemaining, studyDuration]);
 
 
     const addQuizAnswer = useCallback((newAnswer: QuizAnswer) => {

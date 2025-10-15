@@ -82,8 +82,12 @@ const FlashcardGeneratorComponent = ({
         throw new Error(pdfValidation.error || 'Invalid PDF data');
       }
 
-      const pdfDataUri = taskInfo!.dataUri;
-      const pdfTitle = taskInfo!.name;
+      if (!taskInfo?.dataUri || !taskInfo?.name) {
+        throw new Error('Task information is incomplete');
+      }
+      
+      const pdfDataUri = taskInfo.dataUri;
+      const pdfTitle = taskInfo.name;
 
       updateProgress(10, 'Analyzing PDF content...');
 
@@ -149,22 +153,24 @@ const FlashcardGeneratorComponent = ({
       // Pass flashcards to parent component
       onFlashcardsGenerated(result.data.flashcards);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Flashcard generation error:', error);
 
       let errorMessage = 'Failed to generate flashcards. Please try again.';
       
       // Handle specific error types with user-friendly messages
-      if (error.message?.includes('Authentication')) {
-        errorMessage = 'Please log in again to continue.';
-      } else if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
-        errorMessage = 'AI service is busy. Please try again in a few minutes.';
-      } else if (error.message?.includes('No flashcards') || error.message?.includes('No valid flashcards')) {
-        errorMessage = 'Unable to generate flashcards from this document. Please ensure the PDF contains readable text.';
-      } else if (error.message?.includes('too small') || error.message?.includes('empty')) {
-        errorMessage = 'PDF content is insufficient for flashcard generation. Please use a document with more text content.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      if (error instanceof Error) {
+        if (error.message?.includes('Authentication')) {
+          errorMessage = 'Please log in again to continue.';
+        } else if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
+          errorMessage = 'AI service is busy. Please try again in a few minutes.';
+        } else if (error.message?.includes('No flashcards') || error.message?.includes('No valid flashcards')) {
+          errorMessage = 'Unable to generate flashcards from this document. Please ensure the PDF contains readable text.';
+        } else if (error.message?.includes('too small') || error.message?.includes('empty')) {
+          errorMessage = 'PDF content is insufficient for flashcard generation. Please use a document with more text content.';
+        } else {
+          errorMessage = error.message;
+        }
       }
 
       setGenerationState({

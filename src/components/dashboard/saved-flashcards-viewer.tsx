@@ -83,9 +83,10 @@ const SavedFlashcardsViewerComponent = ({ className }: SavedFlashcardsViewerProp
       } else {
         throw new Error(data.error || 'Failed to fetch flashcards');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching flashcards:', err);
-      setError(err.message || 'Failed to load flashcards. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage || 'Failed to load flashcards. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +187,7 @@ const SavedFlashcardsViewerComponent = ({ className }: SavedFlashcardsViewerProp
       if (!data.success) {
         throw new Error(data.error || 'Failed to update flashcard status');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating flashcard status:', err);
       setError('Failed to update flashcard status. Please try again.');
       // Revert the optimistic update
@@ -226,7 +227,7 @@ const SavedFlashcardsViewerComponent = ({ className }: SavedFlashcardsViewerProp
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete flashcards');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting flashcards:', err);
       setError('Failed to delete flashcards. Please try again.');
       // Revert the optimistic update

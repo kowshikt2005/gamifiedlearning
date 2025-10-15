@@ -95,12 +95,12 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [completedSessions]); // Removed fetchLatestProgress to prevent cascade
+  }, [completedSessions, sessionData]); // Added sessionData dependency
 
   // Single useEffect to handle all task loading
   useEffect(() => {
     fetchTasks();
-  }, [sessionData, completedSessions]); // Only depend on data changes
+  }, [fetchTasks]); // Fixed dependency
 
   // Remove periodic refresh - rely on cache and manual refresh instead
   

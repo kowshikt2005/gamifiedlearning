@@ -4,7 +4,6 @@ import { StudySession } from '@/lib/models/user';
 import { QuizAnswer } from '@/lib/database-utils';
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
-// @ts-ignore
 import jwt from 'jsonwebtoken';
 
 async function getUserFromToken(request: NextRequest) {
@@ -15,7 +14,6 @@ async function getUserFromToken(request: NextRequest) {
   }
 
   const token = authHeader.substring(7);
-  // @ts-ignore
   const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'fallback-secret') as {
     userId: string;
     email: string;

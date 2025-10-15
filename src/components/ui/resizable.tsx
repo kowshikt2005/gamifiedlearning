@@ -67,7 +67,7 @@ export function Resizable({
       window.removeEventListener('mousemove', resize);
       window.removeEventListener('mouseup', stopResizing);
     };
-  }, [isResizing]);
+  }, [isResizing, resize]);
 
   return (
     <div 

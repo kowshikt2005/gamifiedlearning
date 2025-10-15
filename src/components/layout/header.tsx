@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+// Removed unused useRouter import
 import {
   Home,
   Menu,

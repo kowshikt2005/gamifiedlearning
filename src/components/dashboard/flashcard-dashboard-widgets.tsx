@@ -183,17 +183,18 @@ export function FlashcardDashboardWidgets({ className }: FlashcardDashboardWidge
         setRecentFlashcards(recentCards);
       }
       hasFetched.current = true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching flashcard data:', err);
-      if (!err.message?.includes('Failed to fetch')) {
-        setError(err.message || 'Failed to load flashcard data');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      if (!errorMessage.includes('Failed to fetch')) {
+        setError(errorMessage || 'Failed to load flashcard data');
       }
       hasFetched.current = true;
     } finally {
       setIsLoading(false);
       setIsFetching(false);
     }
-  }, []);
+  }, [calculateFlashcardStats, isFetching]);
 
   // Memoized calculations
   const knowledgeProgress = useMemo(() => {
@@ -211,7 +212,7 @@ export function FlashcardDashboardWidgets({ className }: FlashcardDashboardWidge
         hasFetched.current = true;
       }
     }
-  }, []);
+  }, [fetchFlashcardData]);
 
   if (isLoading) {
     return (

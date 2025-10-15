@@ -300,7 +300,7 @@ export default function StudyPage() {
                                                 <div className="text-center">
                                                     <h3 className="text-lg font-semibold mb-2">PDF Viewer Not Available</h3>
                                                     <p className="text-muted-foreground mb-4">
-                                                        Your browser doesn't support embedded PDF viewing, but you can still use all study features.
+                                                        Your browser doesn&apos;t support embedded PDF viewing, but you can still use all study features.
                                                     </p>
                                                     <div className="space-y-2">
                                                         <Button asChild variant="outline">

@@ -105,7 +105,7 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
                 }
             }, 500);
         }
-    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, addPoints, addStudyTime, incrementStreak, user, taskInfo, toast, onComplete]);
+    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, addPoints, addStudyTime, incrementStreak, user, taskInfo, toast, onComplete, getValidToken, powerUps]);
 
     // Start timer
     const handleStart = useCallback(() => {
@@ -229,7 +229,7 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
                 onEarlyFinish();
             }
         }
-    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, studyDuration, addPoints, addStudyTime, user, taskInfo, toast, onEarlyFinish, updateTimerState]);
+    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, studyDuration, addPoints, addStudyTime, user, taskInfo, toast, onEarlyFinish, updateTimerState, getValidToken]);
 
     // Reset timer
     const handleReset = useCallback(() => {

@@ -8,7 +8,6 @@
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import bcrypt from 'bcryptjs';
-// @ts-ignore
 import jwt from 'jsonwebtoken';
 
 // User interface
@@ -66,12 +65,11 @@ export class AuthService {
       username: user.username
     };
 
-    // @ts-ignore
     return jwt.sign(payload, this.getJwtSecret(), {
       expiresIn: this.getJwtExpiration(),
       issuer: 'gamified-learning-platform',
       audience: 'gamified-learning-users'
-    });
+    } as jwt.SignOptions);
   }
 
   /**
@@ -79,11 +77,10 @@ export class AuthService {
    */
   static verifyToken(token: string): JwtPayload | null {
     try {
-      // @ts-ignore
       const decoded = jwt.verify(token, this.getJwtSecret(), {
         issuer: 'gamified-learning-platform',
         audience: 'gamified-learning-users'
-      }) as JwtPayload;
+      } as jwt.VerifyOptions) as JwtPayload;
       return decoded;
     } catch (error) {
       console.error('Token verification failed:', error);

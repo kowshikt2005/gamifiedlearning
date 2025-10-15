@@ -41,7 +41,10 @@ export default function QuizSessionPage() {
         const fetchQuestions = async () => {
             setIsLoading(true);
             try {
-                const result = await generateQuizQuestions({ pdfDataUri: taskInfo.dataUri! });
+                if (!taskInfo.dataUri) {
+                    throw new Error('No PDF data available');
+                }
+                const result = await generateQuizQuestions({ pdfDataUri: taskInfo.dataUri });
                 setContextQuizQuestions(result.questions);
             } catch (error) {
                 console.error("Failed to generate quiz questions:", error);
@@ -105,7 +108,7 @@ export default function QuizSessionPage() {
             title: "Answer Revealed! 💡",
             description: "The correct answer is now highlighted. (-10 points)",
         });
-    }, [useCoin, coinsUsed, currentQuestionIndex, toast]);
+    }, [currentQuestionIndex, toast]);
 
     const isAnswerRevealed = useMemo(() => revealedAnswers.includes(currentQuestionIndex), [revealedAnswers, currentQuestionIndex]);
 

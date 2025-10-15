@@ -189,13 +189,15 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
       setAchievements(progress.achievements || DEFAULT_ACHIEVEMENTS);
 
       // Calculate daily progress (today's study time)
-      if (user.progress.studySessions) {
+      if (progress.studySessions) {
         const today = new Date().toISOString().split('T')[0];
-        const todaysSessions = user.progress.studySessions.filter(
-          (session: any) => session.completedAt && session.completedAt.toString().split('T')[0] === today
+        const todaysSessions = progress.studySessions.filter(
+          (session: { completedAt?: Date | string; duration?: number }) => 
+            session.completedAt && session.completedAt.toString().split('T')[0] === today
         );
-        const todaysTime = todaysSessions.reduce((total: number, session: any) => total + (session.duration || 0), 0);
-        setDailyProgress(Math.min(todaysTime, user.progress.dailyGoal || 30));
+        const todaysTime = todaysSessions.reduce((total: number, session: { duration?: number }) => 
+          total + (session.duration || 0), 0);
+        setDailyProgress(Math.min(todaysTime, progress.dailyGoal || 30));
       }
     } else {
       // Reset to default values when no user or progress
