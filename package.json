@@ -18,6 +18,8 @@
     "test:install": "node scripts/test-installation.js",
     "clean-install": "node scripts/clean-install.js",
     "verify-setup": "node scripts/verify-setup.js",
+    "optimize:db": "node scripts/optimize-database.js",
+    "test:db": "node scripts/test-db-connection.js",
     "test:deployment": "node scripts/test-deployment.js",
     "postinstall": "echo 'Installation complete! Run npm run setup to configure the application.'"
   },

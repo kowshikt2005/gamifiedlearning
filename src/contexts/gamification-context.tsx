@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 
 // Types for our gamification system
@@ -75,8 +75,8 @@ interface GamificationContextType {
 
   // Actions
   addPoints: (amount: number) => void;
-  addStudySessionPoints: (minutes: number, completedSuccessfully: boolean, has2xPowerUp?: boolean) => number;
-  addQuizPoints: (correctAnswers: number, wrongAnswers: number, answersRevealed: number) => number;
+  addStudySessionPoints: (minutes: number, completedSuccessfully: boolean, has2xPowerUp?: boolean, quizScore?: number) => number;
+  addQuizPoints: (correctAnswers: number, wrongAnswers: number, answersRevealed: number, totalQuestions: number, timeSpent?: number) => number;
 
   buyPowerUp: (powerUpId: string) => boolean;
   incrementStreak: () => void;
@@ -93,6 +93,9 @@ interface GamificationContextType {
   calculatePointsForNextLevel: (currentLevel: number, currentPoints: number) => number;
   useCoin: () => boolean; // Returns false if coins >= 3
   resetCoins: () => void; // Reset coins for new quiz
+  awardBonusCoin: () => void; // Award bonus coin for perfect score
+  hasBonusCoin: () => boolean; // Check if bonus coin available
+  useBonusCoin: () => void; // Use bonus coin
   syncToDatabase: () => Promise<boolean>; // Manual sync to database
   fetchLatestProgress: () => Promise<boolean>; // Fetch latest from database
 }
@@ -192,10 +195,10 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
       if (progress.studySessions) {
         const today = new Date().toISOString().split('T')[0];
         const todaysSessions = progress.studySessions.filter(
-          (session: { completedAt?: Date | string; duration?: number }) => 
+          (session: { completedAt?: Date | string; duration?: number }) =>
             session.completedAt && session.completedAt.toString().split('T')[0] === today
         );
-        const todaysTime = todaysSessions.reduce((total: number, session: { duration?: number }) => 
+        const todaysTime = todaysSessions.reduce((total: number, session: { duration?: number }) =>
           total + (session.duration || 0), 0);
         setDailyProgress(Math.min(todaysTime, progress.dailyGoal || 30));
       }
@@ -371,7 +374,7 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
         return () => clearTimeout(timeoutId);
       }
     }
-  }, [user, points, level, streak, totalStudyTime, syncToDatabase, lastSyncTime, lastSyncedData, isInitialLoad]);
+  }, [user?.username, points, level, streak, totalStudyTime, lastSyncTime, lastSyncedData, isInitialLoad]); // Removed syncToDatabase from dependencies
 
   // Mark initial load as complete after first render
   useEffect(() => {
@@ -459,34 +462,86 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     ));
   }, []);
 
-  // Level up system with +100 bonus points
+  // Level up system - ROBUST protection against infinite loops
+  const [isLevelingUp, setIsLevelingUp] = useState(false);
+  const [lastProcessedLevel, setLastProcessedLevel] = useState(1);
+  const levelUpTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
+    // Multiple guards to prevent infinite loops
+    if (isLevelingUp) return; // Guard 1: Already processing
+    if (points < 100) return; // Guard 2: Not enough points to level up
+
     const newLevel = calculateLevelFromPoints(points);
-    if (newLevel > level) {
-      setLevel(newLevel);
-      // If level increased then +100 points
-      setPoints((prev: number) => prev + 100);
-
-      // Award level up badge
-      if (newLevel >= 5) {
-        earnBadge('scholar');
+    
+    // Guard 3: Only process if level actually changed AND we haven't processed this level yet
+    if (newLevel > level && newLevel > lastProcessedLevel) {
+      setIsLevelingUp(true);
+      const levelsGained = newLevel - level;
+      
+      // Clear any pending timeout
+      if (levelUpTimeoutRef.current) {
+        clearTimeout(levelUpTimeoutRef.current);
       }
-    }
-  }, [points, level, calculateLevelFromPoints, earnBadge]);
+      
+      // Update level immediately
+      setLevel(newLevel);
+      setLastProcessedLevel(newLevel);
 
-  // Check for point-based badges
-  useEffect(() => {
-    if (points >= 100) {
-      earnBadge('points-100');
+      // Award level up badge immediately (doesn't affect points)
+      if (newLevel >= 5) {
+        setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
+          badge.id === 'scholar' && !badge.earned
+            ? { ...badge, earned: true, earnedAt: new Date() }
+            : badge
+        ));
+      }
+
+      // Add level bonus AFTER a delay to prevent infinite loop
+      levelUpTimeoutRef.current = setTimeout(() => {
+        const levelBonus = levelsGained * 100; // 100 points per level gained
+        let totalBonus = levelBonus;
+
+        // Level milestone bonuses
+        if (newLevel === 5) {
+          totalBonus += 200; // +200 bonus at level 5
+        }
+        if (newLevel === 10) {
+          totalBonus += 500; // +500 bonus at level 10
+        }
+
+        // Add all bonuses at once to minimize state updates
+        setPoints((prev: number) => prev + totalBonus);
+        setIsLevelingUp(false);
+        levelUpTimeoutRef.current = null;
+      }, 150); // Slightly longer delay for safety
     }
-  }, [points, earnBadge]);
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (levelUpTimeoutRef.current) {
+        clearTimeout(levelUpTimeoutRef.current);
+      }
+    };
+  }, [points, level, lastProcessedLevel, isLevelingUp]); // Removed function dependencies
+
+  // Check for point-based badges - with tracking to prevent duplicate awards
+  const [badgesChecked, setBadgesChecked] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (points >= 100 && !badgesChecked.has('points-100')) {
+      earnBadge('points-100');
+      setBadgesChecked(prev => new Set(prev).add('points-100'));
+    }
+  }, [points, badgesChecked]);
 
   // Check for streak badges
   useEffect(() => {
-    if (streak >= 7) {
+    if (streak >= 7 && !badgesChecked.has('streak-7')) {
       earnBadge('streak-7');
+      setBadgesChecked(prev => new Set(prev).add('streak-7'));
     }
-  }, [streak, earnBadge]);
+  }, [streak, badgesChecked]);
 
   // Power-up timer
   useEffect(() => {
@@ -513,39 +568,98 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     setPoints((prev: number) => Math.max(0, prev + actualAmount)); // Prevent negative points
   }, [powerUps]);
 
-  // Study session points according to new system
-  const addStudySessionPoints = useCallback((minutes: number, completedSuccessfully: boolean, has2xPowerUp: boolean = false) => {
+  // Enhanced study session points with bonuses
+  const addStudySessionPoints = useCallback((minutes: number, completedSuccessfully: boolean, has2xPowerUp: boolean = false, quizScore?: number) => {
     if (completedSuccessfully) {
-      // If session completed successfully then time in minutes * 5 points to be added
+      // Base points: time in minutes * 5 points
       let pointsEarned = minutes * 5;
-      // If a 2x powerup is active then multiply the points scored by 2
+
+      // Perfect session bonus (>80% quiz score)
+      if (quizScore && quizScore >= 80) {
+        pointsEarned += 25; // +25 bonus for perfect session
+      }
+
+      // Long session bonus (>60 minutes)
+      if (minutes > 60) {
+        const extraMinutes = minutes - 60;
+        const bonusSessions = Math.floor(extraMinutes / 30); // Every 30 minutes
+        pointsEarned += bonusSessions * 10; // +10 bonus per additional 30 min
+      }
+
+      // Apply 2x powerup multiplier to total points (including bonuses)
       if (has2xPowerUp) {
         pointsEarned = pointsEarned * 2;
       }
-      addPoints(pointsEarned);
+
+      // Add points directly to avoid dependency
+      setPoints((prev: number) => Math.max(0, prev + pointsEarned));
       return pointsEarned;
     } else {
       // If session ended before then -25 points
-      addPoints(-25);
+      setPoints((prev: number) => Math.max(0, prev - 25));
       return -25;
     }
-  }, [addPoints]);
+  }, []); // No dependencies needed
 
 
 
-  // Quiz points according to new system
-  const addQuizPoints = useCallback((correctAnswers: number, wrongAnswers: number, answersRevealed: number) => {
-    // For every correct answer +5 points
-    const correctPoints = correctAnswers * 5;
-    // For every wrong answer -1 point
-    const wrongPoints = wrongAnswers * -1;
-    // If answer revealed then -10 points
-    const revealedPoints = answersRevealed * -10;
+  // Enhanced quiz points system with bonuses
+  const addQuizPoints = useCallback((correctAnswers: number, wrongAnswers: number, answersRevealed: number, totalQuestions: number, timeSpent?: number) => {
+    // eslint-disable-next-line no-console
+    console.log('🎮 addQuizPoints called:', { correctAnswers, wrongAnswers, answersRevealed, totalQuestions, timeSpent });
+    
+    // Base points calculation
+    const correctPoints = correctAnswers * 5; // +5 per correct answer
+    const wrongPoints = wrongAnswers * -1; // -1 per wrong answer  
+    const revealedPoints = answersRevealed * -10; // -10 per answer revealed
 
-    const totalPoints = correctPoints + wrongPoints + revealedPoints;
-    addPoints(totalPoints);
-    return totalPoints;
-  }, [addPoints]);
+    let bonusPoints = 0;
+
+    // Perfect score bonus (100%): +50 bonus
+    if (correctAnswers === totalQuestions && totalQuestions > 0) {
+      bonusPoints += 50;
+      // Award perfect score badge
+      setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
+        badge.id === 'perfect-score' && !badge.earned
+          ? { ...badge, earned: true, earnedAt: new Date() }
+          : badge
+      ));
+    }
+
+    // Speed bonus: +1 point per question if completed in <30 seconds
+    if (timeSpent && timeSpent < 30 && totalQuestions > 0) {
+      bonusPoints += totalQuestions; // +1 per question for speed
+    }
+
+    const totalPoints = correctPoints + wrongPoints + revealedPoints + bonusPoints;
+
+    // Check for 2x powerup - inline to avoid dependency
+    const doublePointsActive = powerUps.some((p: PowerUp) => p.id === 'double-points' && p.active);
+    const finalPoints = doublePointsActive ? totalPoints * 2 : totalPoints;
+
+    // Add points directly to avoid addPoints dependency
+    setPoints((prev: number) => {
+      const newTotal = Math.max(0, prev + finalPoints);
+      // eslint-disable-next-line no-console
+      console.log('💰 Points updated:', { previous: prev, added: finalPoints, newTotal });
+      return newTotal;
+    });
+
+    // Check quiz-related achievements
+    const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+    if (accuracy >= 90) {
+      // Award quiz expert badge directly
+      setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
+        badge.id === 'quiz-expert' && !badge.earned
+          ? { ...badge, earned: true, earnedAt: new Date() }
+          : badge
+      ));
+    }
+
+    // eslint-disable-next-line no-console
+    console.log('✅ addQuizPoints completed, returning:', finalPoints);
+    return finalPoints;
+  }, [powerUps]); // Minimized dependencies - only powerUps needed for 2x check
 
   const activatePowerUp = useCallback((powerUpId: string) => {
     setPowerUps((prev: PowerUp[]) => prev.map((powerUp: PowerUp) => {
@@ -563,19 +677,47 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  // Power-up purchases - deduct 100 points
+  // Enhanced power-up system with stacking limits and cooldowns
+  const [powerUpCooldowns, setPowerUpCooldowns] = useState<{ [key: string]: Date }>({});
+
   const buyPowerUp = useCallback((powerUpId: string) => {
-    const powerUpCost = 100; // If user buys a powerup then deduct 100 points
+    const powerUpCost = 100; // Cost: 100 points
 
-    if (points >= powerUpCost) {
-      setPoints((prev: number) => prev - powerUpCost);
-      activatePowerUp(powerUpId);
-      return true;
+    // Check if user has enough points
+    if (points < powerUpCost) {
+      return false;
     }
-    return false;
-  }, [points, activatePowerUp]);
 
-  // Streak system - if study session created for sequential days then streak is increased
+    // Check for active powerups (max 1 at a time)
+    const activePowerUp = powerUps.find((p: PowerUp) => p.active);
+    if (activePowerUp) {
+      return false; // Already have an active powerup
+    }
+
+    // Check cooldown (1 hour between purchases)
+    const lastPurchase = powerUpCooldowns[powerUpId];
+    if (lastPurchase) {
+      const hourAgo = new Date();
+      hourAgo.setHours(hourAgo.getHours() - 1);
+      if (lastPurchase > hourAgo) {
+        return false; // Still in cooldown
+      }
+    }
+
+    // Purchase successful
+    setPoints((prev: number) => prev - powerUpCost);
+    activatePowerUp(powerUpId);
+
+    // Set cooldown
+    setPowerUpCooldowns(prev => ({
+      ...prev,
+      [powerUpId]: new Date()
+    }));
+
+    return true;
+  }, [points, powerUps, powerUpCooldowns, activatePowerUp]);
+
+  // Enhanced streak system with bonuses and protection
   const incrementStreak = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
     const lastStudyDate = typeof window !== 'undefined' ? localStorage.getItem('lastStudyDate') : null;
@@ -588,10 +730,36 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
 
       if (lastStudyDate === yesterdayStr) {
         // Consecutive day - increment streak
-        setStreak((prev: number) => prev + 1);
+        const newStreak = streak + 1;
+        setStreak(newStreak);
+
+        // Streak bonuses
+        if (newStreak === 7) {
+          addPoints(50); // 7 days: +50pts
+          earnBadge('streak-7');
+        } else if (newStreak === 30) {
+          addPoints(200); // 30 days: +200pts
+        } else if (newStreak === 100) {
+          addPoints(500); // 100 days: +500pts
+        }
       } else if (lastStudyDate !== today) {
-        // Not consecutive - reset streak to 1
-        setStreak(1);
+        // Check for streak protection (1 "freeze" day per week)
+        const streakProtectionUsed = typeof window !== 'undefined' ?
+          localStorage.getItem('streakProtectionUsed') : null;
+        const lastProtectionDate = streakProtectionUsed ? new Date(streakProtectionUsed) : null;
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        if (!lastProtectionDate || lastProtectionDate < weekAgo) {
+          // Can use streak protection
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('streakProtectionUsed', today);
+          }
+          // Keep current streak (protection used)
+        } else {
+          // No protection available - reset streak to 1
+          setStreak(1);
+        }
       }
 
       if (typeof window !== 'undefined') {
@@ -599,7 +767,7 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
       }
     }
     // If already studied today, don't change streak
-  }, []);
+  }, [streak, addPoints, earnBadge]);
 
   const resetStreak = useCallback(() => {
     setStreak(0);
@@ -665,17 +833,39 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     }
   }, [totalStudyTime, updateDailyProgress, unlockAchievement]);
 
-  // Coins system - tracks answer reveals in quiz
+  // Enhanced coins system with bonus rewards
   const useCoin = useCallback(() => {
     if (coins >= 3) {
-      return false; // If coins==3 then we can't do any other answer reveals
+      return false; // Max 3 answer reveals per quiz
     }
     setCoins((prev: number) => prev + 1);
     return true;
   }, [coins]);
 
   const resetCoins = useCallback(() => {
-    setCoins(0); // Reset coins for new quiz
+    setCoins(0); // Auto-reset coins for new quiz
+  }, []);
+
+  // Bonus coin system - perfect quiz score gives 1 bonus coin for next quiz
+  const awardBonusCoin = useCallback(() => {
+    // This will be called when user gets perfect score
+    // The bonus coin is conceptual - next quiz starts with -1 coin usage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bonusCoinAvailable', 'true');
+    }
+  }, []);
+
+  const hasBonusCoin = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('bonusCoinAvailable') === 'true';
+    }
+    return false;
+  }, []);
+
+  const useBonusCoin = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bonusCoinAvailable');
+    }
   }, []);
 
   const checkQuestProgress = useCallback((questId: string, progress: number) => {
@@ -726,6 +916,9 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     calculatePointsForNextLevel,
     useCoin,
     resetCoins,
+    awardBonusCoin,
+    hasBonusCoin,
+    useBonusCoin,
     syncToDatabase,
     fetchLatestProgress,
   };

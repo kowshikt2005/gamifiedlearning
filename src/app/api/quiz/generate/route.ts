@@ -4,7 +4,7 @@ import { AuthService } from '@/lib/services/auth-service';
 
 // Configure for AI processing
 export const runtime = 'nodejs';
-export const maxDuration = 300; // 5 minutes for AI processing
+export const maxDuration = 600; // 10 minutes for large PDF processing with Gemini 2.5 Flash
 
 export async function POST(request: NextRequest) {
   try {

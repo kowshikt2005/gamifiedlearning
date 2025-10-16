@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { requestAnimationFramePromise } from '@/lib/utils/performance';
+// Simple requestAnimationFrame promise wrapper
+const requestAnimationFramePromise = (): Promise<number> => {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+};
 
 interface AnimationState {
   isAnimating: boolean;

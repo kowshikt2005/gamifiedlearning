@@ -29,7 +29,7 @@ function CreateTaskPageContent() {
     const handleFileChange = useCallback((files: FileList | null) => {
         if (files && files[0]) {
             const selectedFile = files[0];
-            
+
             // Validate file type
             if (selectedFile.type !== 'application/pdf') {
                 toast({
@@ -39,26 +39,26 @@ function CreateTaskPageContent() {
                 });
                 return;
             }
-            
-            // Validate file size (50MB limit)
-            const maxSize = 50 * 1024 * 1024;
+
+            // Validate file size (100MB limit - optimized for Gemini 2.5 Flash)
+            const maxSize = 100 * 1024 * 1024;
             if (selectedFile.size > maxSize) {
                 toast({
                     variant: 'destructive',
                     title: 'File Too Large',
-                    description: `File size must be less than 50MB. Your file is ${(selectedFile.size / 1024 / 1024).toFixed(1)}MB.`,
+                    description: `File size must be less than 100MB. Your file is ${(selectedFile.size / 1024 / 1024).toFixed(1)}MB. Gemini 2.5 Flash can handle large documents efficiently.`,
                 });
                 return;
             }
-            
-            // Show warning for large files
-            if (selectedFile.size > 10 * 1024 * 1024) {
+
+            // Show info for large files
+            if (selectedFile.size > 30 * 1024 * 1024) {
                 toast({
-                    title: 'Large File Detected',
-                    description: `Processing ${(selectedFile.size / 1024 / 1024).toFixed(1)}MB file may take longer than usual.`,
+                    title: 'Large Document Detected',
+                    description: `Processing ${(selectedFile.size / 1024 / 1024).toFixed(1)}MB file with Gemini 2.5 Flash may take 5-10 minutes for optimal results.`,
                 });
             }
-            
+
             setFile(selectedFile);
         }
     }, [toast]);
@@ -67,7 +67,7 @@ function CreateTaskPageContent() {
         e.preventDefault();
         e.currentTarget.classList.add('border-primary');
     }, []);
-    
+
     const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.currentTarget.classList.remove('border-primary');
@@ -88,11 +88,11 @@ function CreateTaskPageContent() {
             });
             return;
         }
-        
+
         resetSession();
         setIsProcessing(true);
         setProgress(10);
-        
+
         const duration = Number(studyMinutes);
         if (isNaN(duration) || duration <= 0) {
             toast({
@@ -104,7 +104,7 @@ function CreateTaskPageContent() {
             return;
         }
         setTimer(duration * 60);
-        
+
         try {
             // Load utilities dynamically for better performance
             setProcessingStage('Loading utilities...');
@@ -113,37 +113,37 @@ function CreateTaskPageContent() {
                 loadPDFUtils(),
                 loadQuizActions()
             ]);
-            
+
             setProgress(20);
             setProcessingStage('Processing PDF file...');
-            
+
             // Process the PDF file with progress tracking
             const result = await pdfUtils.processPDFFile(file, (fileProgress: number) => {
                 setUploadProgress(fileProgress);
                 setProgress(20 + (fileProgress * 0.5)); // 20-70% for file processing
             });
-            
+
             if (!result.success) {
                 throw new Error(result.error);
             }
-            
+
             setProgress(70);
             setProcessingStage('Preparing study session...');
-            
+
             const fileName = pdfUtils.getFileNameWithoutExtension(file.name);
             if (!result.dataUri) {
                 throw new Error('Failed to extract PDF data');
             }
-            setTaskInfo({ 
-                name: fileName, 
-                dataUri: result.dataUri 
+            setTaskInfo({
+                name: fileName,
+                dataUri: result.dataUri
             });
-            
+
             setProgress(90);
-            
+
             // Pre-generate quiz questions in the background (non-blocking)
             const newTaskId = `task-${Date.now()}`;
-            
+
             // Don't wait for quiz generation - do it in background
             quizActions.pregenerateQuizQuestions(result.dataUri)
                 .then((quizResult) => {
@@ -154,21 +154,21 @@ function CreateTaskPageContent() {
                 .catch((error) => {
                     console.warn('Quiz pre-generation failed:', error);
                 });
-            
+
             setProgress(100);
-            
+
             toast({
                 title: 'Session Ready!',
                 description: `Your study session for ${file.name} is ready.`,
             });
-            
+
             // Navigate immediately without waiting for quiz generation
             router.push(`/dashboard/study/${newTaskId}`);
-            
+
         } catch (error) {
             console.error('Error processing file:', error);
-            toast({ 
-                variant: 'destructive', 
+            toast({
+                variant: 'destructive',
                 title: 'Error processing file',
                 description: error instanceof Error ? error.message : 'An unknown error occurred'
             });
@@ -185,7 +185,7 @@ function CreateTaskPageContent() {
                     <CardDescription>Upload a PDF document to begin your interactive learning experience.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div 
+                    <div
                         className="flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors"
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -210,7 +210,7 @@ function CreateTaskPageContent() {
 
                     <div className="space-y-2">
                         <Label htmlFor="study-time">Study Duration (minutes)</Label>
-                        <Input 
+                        <Input
                             id="study-time"
                             type="number"
                             value={studyMinutes}
@@ -236,7 +236,7 @@ function CreateTaskPageContent() {
                                 </div>
                                 <Progress value={progress} className="w-full" />
                             </div>
-                            
+
                             {uploadProgress > 0 && uploadProgress < 100 && (
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
@@ -246,16 +246,16 @@ function CreateTaskPageContent() {
                                     <Progress value={uploadProgress} className="w-full h-2" />
                                 </div>
                             )}
-                            
+
                             <p className="text-sm text-muted-foreground text-center">
                                 {processingStage || (
-                                    progress < 20 ? 'Initializing...' : 
-                                    progress < 70 ? 'Processing document...' : 
-                                    progress < 90 ? 'Generating study session...' : 
-                                    'Preparing quiz questions...'
+                                    progress < 20 ? 'Initializing...' :
+                                        progress < 70 ? 'Processing document...' :
+                                            progress < 90 ? 'Generating study session...' :
+                                                'Preparing quiz questions...'
                                 )}
                             </p>
-                            
+
                             {file && file.size > 10 * 1024 * 1024 && (
                                 <p className="text-xs text-amber-600 text-center">
                                     Large file detected ({(file.size / 1024 / 1024).toFixed(1)} MB) - This may take a few moments
@@ -263,10 +263,10 @@ function CreateTaskPageContent() {
                             )}
                         </div>
                     )}
-                    <Button 
-                        onClick={handleCreateSession} 
-                        disabled={!file || isProcessing} 
-                        size="lg" 
+                    <Button
+                        onClick={handleCreateSession}
+                        disabled={!file || isProcessing}
+                        size="lg"
                         className="w-full bg-accent hover:bg-accent/90"
                     >
                         {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}

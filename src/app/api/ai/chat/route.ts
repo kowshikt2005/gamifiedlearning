@@ -4,7 +4,7 @@ import { AuthService } from '@/lib/services/auth-service';
 
 // Configure for AI processing
 export const runtime = 'nodejs';
-export const maxDuration = 120; // 2 minutes for chat responses
+export const maxDuration = 240; // 4 minutes for complex chat responses with large documents
 
 export async function POST(request: NextRequest) {
   try {

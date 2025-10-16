@@ -28,7 +28,7 @@ import { Flashcard, CardAction } from '@/lib/models/flashcard';
 import { cn } from '@/lib/utils';
 import { useFlashcardActions } from '@/hooks/use-flashcard-actions';
 import { useSmoothAnimations } from '@/hooks/use-smooth-animations';
-import { useMemoryManagement, useComponentLifecycle } from '@/hooks/use-memory-management';
+
 
 interface FlashcardViewerProps {
   flashcards: Flashcard[];
@@ -83,9 +83,7 @@ const FlashcardViewerComponent = ({
   });
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Performance optimizations
-  useComponentLifecycle('FlashcardViewer');
-  useMemoryManagement();
+  // Animation state
   const { flipCard, bounceCard, animationState } = useSmoothAnimations({
     duration: 300,
     onAnimationStart: () => {

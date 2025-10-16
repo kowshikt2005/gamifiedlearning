@@ -22,16 +22,14 @@ import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Logo } from '../icons';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
+
 import { useAuth } from '@/contexts/auth-context';
 
 export function Header() {
   const { user, logout } = useAuth();
-  const userAvatar = PlaceHolderImages.find(img => img.id === 'user-avatar') || {
-    id: 'fallback',
+  const userAvatar = {
     imageUrl: 'https://picsum.photos/seed/fallback/32/32',
-    imageHint: 'person',
-    description: 'Fallback avatar'
+    description: 'User avatar'
   };
 
   const handleLogout = async () => {
@@ -112,7 +110,7 @@ export function Header() {
             className="overflow-hidden rounded-full"
           >
             <Avatar className="h-8 w-8">
-              <AvatarImage src={userAvatar?.imageUrl} alt="User avatar" data-ai-hint={userAvatar?.imageHint}/>
+              <AvatarImage src={userAvatar?.imageUrl} alt="User avatar" />
               <AvatarFallback>SM</AvatarFallback>
             </Avatar>
           </Button>

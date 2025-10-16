@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStudySession } from '@/contexts/study-session-context';
 import { useGamification } from '@/contexts/gamification-context';
@@ -15,7 +15,7 @@ export default function SessionResultsPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, quizQuestions, quizAnswers, coinsUsed, studyDuration, penaltyPoints, resetSession, addCompletedSession } = useStudySession();
-    const { points, level, streak, addPoints, completeChallenge } = useGamification();
+    const { points, level, streak, addQuizPoints, completeChallenge, awardBonusCoin } = useGamification();
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
@@ -62,45 +62,93 @@ export default function SessionResultsPage() {
         }, 0);
     }, [quizQuestions, quizAnswers]);
     
-    // NEW COMPREHENSIVE SCORING SYSTEM
+    // ENHANCED SCORING SYSTEM with new gamification rules
     const correctAnswers = score;
     const wrongAnswers = quizQuestions ? quizQuestions.length - score : 0;
+    const totalQuestions = quizQuestions ? quizQuestions.length : 0;
     
     const correctAnswerPoints = useMemo(() => correctAnswers * 5, [correctAnswers]); // +5 points per correct answer
     const wrongAnswerPenalty = useMemo(() => wrongAnswers * 1, [wrongAnswers]); // -1 point per wrong answer
     const revealPenalty = useMemo(() => coinsUsed * 10, [coinsUsed]); // -10 points per answer reveal
     
-    const finalPoints = useMemo(() => {
-        return correctAnswerPoints - wrongAnswerPenalty - revealPenalty - penaltyPoints;
-    }, [correctAnswerPoints, wrongAnswerPenalty, revealPenalty, penaltyPoints]);
+    // Calculate quiz points using enhanced system
+    const [finalPoints, setFinalPoints] = useState(0);
+    const pointsCalculationAttempted = useRef(false);
 
-    // Add points when final points are calculated (only once)
+    // Add points when quiz is completed (only once) - using ref for immediate guard
     useEffect(() => {
-        if (finalPoints !== 0 && !pointsAwarded && isClient) {
-            addPoints(finalPoints);
-            setPointsAwarded(true);
+        // Multiple guards to prevent duplicate point additions
+        if (pointsCalculationAttempted.current) return; // Guard 1: Already attempted
+        if (!isClient) return; // Guard 2: Not client-side yet
+        if (!quizQuestions || quizQuestions.length === 0) return; // Guard 3: No questions
+        if (quizAnswers.length === 0) return; // Guard 4: No answers
+        if (pointsAwarded) return; // Guard 5: Already awarded
+        
+        // Set flag immediately to prevent any duplicate calls
+        pointsCalculationAttempted.current = true;
+        
+        // eslint-disable-next-line no-console
+        console.log('🎯 Calculating points for quiz...', {
+            correctAnswers,
+            wrongAnswers,
+            coinsUsed,
+            totalQuestions,
+            studyDuration
+        });
+        
+        // Use enhanced addQuizPoints function
+        const quizPoints = addQuizPoints(
+            correctAnswers, 
+            wrongAnswers, 
+            coinsUsed, 
+            totalQuestions, 
+            studyDuration // Pass study duration for speed bonus calculation
+        );
+        
+        // eslint-disable-next-line no-console
+        console.log('✅ Points calculated:', quizPoints);
+        
+        // Subtract penalty points for early session end
+        const totalPoints = quizPoints - penaltyPoints;
+        setFinalPoints(totalPoints);
+        setPointsAwarded(true);
+        
+        // Save session immediately after calculating points (prevents infinite loops)
+        if (taskInfo && params.sessionId && !sessionSaveAttempted.current) {
+            sessionSaveAttempted.current = true;
+            // eslint-disable-next-line no-console
+            console.log('💾 Saving session immediately after points calculation:', {
+                id: params.sessionId,
+                taskName: taskInfo.name,
+                points: totalPoints,
+                timestamp: new Date().toISOString()
+            });
             
-            // Check for perfect score challenge
-            if (quizQuestions && score === quizQuestions.length) {
-                completeChallenge('perfect-score');
-            }
-            
-            // Check for speed demon challenge (quiz completed in under 5 minutes)
-            if (studyDuration < 300) {
-                completeChallenge('speed-demon');
-            }
-        }
-    }, [finalPoints, addPoints, quizQuestions, score, studyDuration, completeChallenge, pointsAwarded, isClient]);
-
-    useEffect(() => {
-        if(taskInfo && params.sessionId && !pointsAwarded) {
             addCompletedSession({
                 id: params.sessionId as string,
                 taskName: taskInfo.name,
-                points: finalPoints
-            })
+                points: totalPoints
+            });
         }
-    }, [taskInfo, params.sessionId, finalPoints, addCompletedSession, pointsAwarded])
+        
+        // Award bonus coin for perfect score
+        if (correctAnswers === totalQuestions && totalQuestions > 0) {
+            awardBonusCoin();
+            completeChallenge('perfect-score');
+        }
+        
+        // Check for speed demon challenge (quiz completed in under 5 minutes)
+        if (studyDuration < 300) {
+            completeChallenge('speed-demon');
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isClient, quizQuestions?.length, quizAnswers.length]); // Intentionally minimal deps - ref guard prevents duplicates
+
+    // Track if session has been saved to prevent duplicate saves
+    const sessionSaveAttempted = useRef(false);
+
+    // Save session immediately after points are calculated (in the points calculation useEffect)
+    // No separate useEffect needed to prevent infinite loops  
 
     const formatDuration = useCallback((seconds: number) => {
         const h = Math.floor(seconds / 3600);

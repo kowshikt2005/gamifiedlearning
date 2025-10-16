@@ -19,7 +19,7 @@ export default function QuizSessionPage() {
     const router = useRouter();
     const params = useParams();
     const { toast } = useToast();
-    const { taskInfo, setQuizQuestions: setContextQuizQuestions, quizQuestions, addQuizAnswer, getAnswerForQuestion, useCoin, coinsUsed } = useStudySession();
+    const { taskInfo, setQuizQuestions: setContextQuizQuestions, quizQuestions, addQuizAnswer, getAnswerForQuestion, coinsUsed } = useStudySession();
     const { points } = useGamification();
 
     const [isLoading, setIsLoading] = useState(true);

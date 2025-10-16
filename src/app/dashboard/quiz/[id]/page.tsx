@@ -18,13 +18,14 @@ export default function QuizPage() {
     const router = useRouter();
     const params = useParams();
     const { toast } = useToast();
-    const { taskInfo, setQuizQuestions: setContextQuizQuestions, quizQuestions, addQuizAnswer, getAnswerForQuestion, coinsUsed } = useStudySession();
-    const { points } = useGamification();
+    const { taskInfo, setQuizQuestions: setContextQuizQuestions, quizQuestions, addQuizAnswer, getAnswerForQuestion, coinsUsed, useCoin } = useStudySession();
+    const { points, resetCoins } = useGamification();
 
     const [isLoading, setIsLoading] = useState(true);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [revealedAnswers, setRevealedAnswers] = useState<number[]>([]);
     const [score, setScore] = useState(0);
+
 
     useEffect(() => {
         if (!taskInfo?.dataUri) {
@@ -36,6 +37,9 @@ export default function QuizPage() {
             router.replace('/dashboard/create-task');
             return;
         }
+
+        // Auto-reset coins when starting a new quiz
+        resetCoins();
 
         const fetchQuestions = async () => {
             setIsLoading(true);
@@ -110,7 +114,7 @@ export default function QuizPage() {
         } else {
             setIsLoading(false);
         }
-    }, [taskInfo, router, toast, setContextQuizQuestions, quizQuestions]);
+    }, [taskInfo, router, toast, setContextQuizQuestions, quizQuestions, resetCoins]);
 
     const currentQuestion = useMemo(() => quizQuestions?.[currentQuestionIndex], [quizQuestions, currentQuestionIndex]);
     const selectedAnswer = useMemo(() => getAnswerForQuestion(currentQuestionIndex), [currentQuestionIndex, getAnswerForQuestion]);
@@ -138,15 +142,38 @@ export default function QuizPage() {
         }
     }, [currentQuestionIndex]);
 
-    const handleRevealAnswer = useCallback(() => {
-        // Don't apply penalty here - will be calculated in feedback page
-        setRevealedAnswers(prev => [...prev, currentQuestionIndex]);
-        
-        toast({
-            title: "Answer Revealed! 💡",
-            description: "The correct answer is now highlighted. (-25 points)",
-        });
-    }, [currentQuestionIndex, toast]);
+    // Check if can use coin
+    const canUseCoin = coinsUsed < 3;
+    
+    // Track previous revealed answers count to detect new reveals
+    const [prevRevealCount, setPrevRevealCount] = useState(0);
+    
+    // Use coin when a new answer is revealed
+    useEffect(() => {
+        if (revealedAnswers.length > prevRevealCount) {
+            // eslint-disable-next-line react-hooks/rules-of-hooks
+            useCoin(); // This is called at the top level in useEffect, which is valid
+            setPrevRevealCount(revealedAnswers.length);
+        }
+    }, [revealedAnswers.length, prevRevealCount, useCoin]);
+    
+    const handleRevealClick = useCallback(() => {
+        if (canUseCoin) {
+            // Just track the reveal - coin usage will be handled by useEffect above
+            setRevealedAnswers(prev => [...prev, currentQuestionIndex]);
+            
+            toast({
+                title: "Answer Revealed! 💡",
+                description: "The correct answer is now highlighted. (-10 points)",
+            });
+        } else {
+            toast({
+                variant: 'destructive',
+                title: "No More Reveals",
+                description: "You've used all 3 answer reveals for this quiz.",
+            });
+        }
+    }, [canUseCoin, currentQuestionIndex, toast]);
 
     const isAnswerRevealed = useMemo(() => revealedAnswers.includes(currentQuestionIndex), [revealedAnswers, currentQuestionIndex]);
 
@@ -229,20 +256,20 @@ export default function QuizPage() {
                     </Button>
                      <AlertDialog>
                         <AlertDialogTrigger asChild>
-                             <Button variant="outline" className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10 hover:text-yellow-600" disabled={isAnswerRevealed}>
-                                <Lightbulb className="mr-2 h-4 w-4"/> Reveal Answer (-25 pts)
+                             <Button variant="outline" className="text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/10 hover:text-yellow-600" disabled={isAnswerRevealed || !canUseCoin}>
+                                <Lightbulb className="mr-2 h-4 w-4"/> Reveal Answer (-10 pts) {!canUseCoin ? '(Max Used)' : `(${3 - coinsUsed} left)`}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Reveal Answer?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This will cost 25 points and reveal the correct answer for this question. You won&apos;t be able to change your answer afterwards. Are you sure?
+                                    This will cost 10 points and reveal the correct answer for this question. You have {3 - coinsUsed} reveals left for this quiz. Are you sure?
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleRevealAnswer} className="bg-accent hover:bg-accent/90">Confirm</AlertDialogAction>
+                                <AlertDialogAction onClick={handleRevealClick} className="bg-accent hover:bg-accent/90">Confirm</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>

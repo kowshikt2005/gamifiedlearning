@@ -50,7 +50,7 @@ export async function aiChatbotAssistance(input: AiChatbotAssistanceInput, userI
     const result = await Promise.race([
       aiChatbotAssistanceFlow(input),
       new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Chat response timeout')), 2 * 60 * 1000) // 2 minute timeout
+        setTimeout(() => reject(new Error('Chat response timeout')), 4 * 60 * 1000) // 4 minute timeout for complex queries
       )
     ]);
     

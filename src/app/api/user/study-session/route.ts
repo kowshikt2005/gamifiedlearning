@@ -5,6 +5,9 @@ import { QuizAnswer } from '@/lib/database-utils';
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import jwt from 'jsonwebtoken';
+import { studySessionLimiter, withRateLimit } from '@/lib/rate-limiter';
+import { performanceMonitor, performanceMiddleware } from '@/lib/performance-monitor';
+import { withErrorHandling } from '@/lib/api-error-handler';
 
 async function getUserFromToken(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -37,10 +40,30 @@ async function getSessionCount(userId: string): Promise<number> {
   }
 }
 
-export async function POST(request: NextRequest) {
+// Apply performance monitoring and error handling to POST requests
+const monitoredPOST = withErrorHandling(performanceMiddleware('study-session-post')(async function POST(request: NextRequest) {
   try {
     const userId = await getUserFromToken(request);
-    const sessionData = await request.json();
+    
+    // Check if request has body
+    const text = await request.text();
+    if (!text || text.trim() === '') {
+      return NextResponse.json(
+        { success: false, error: 'Empty request body' },
+        { status: 400 }
+      );
+    }
+
+    // Parse JSON
+    let sessionData;
+    try {
+      sessionData = JSON.parse(text);
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
 
     // Validate and sanitize input data
     const studySession: StudySession = {
@@ -138,7 +161,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Add study session error:', error);
     
-    // Provide more specific error messages
+    // Handle authentication errors specifically
     if (error instanceof Error && error.name === 'JsonWebTokenError') {
       return NextResponse.json(
         { error: 'Invalid authentication token' },
@@ -154,34 +177,51 @@ export async function POST(request: NextRequest) {
         { error: 'No authentication token provided' },
         { status: 401 }
       );
-    } else {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Failed to save study session' },
-        { status: 500 }
-      );
     }
+    
+    // For database errors, let the error handler deal with it
+    throw error;
   }
-}
+}));
 
-export async function GET(request: NextRequest) {
+export { monitoredPOST as POST };
+
+// Apply rate limiting and performance monitoring to GET requests
+const rateLimitedGET = withRateLimit(
+  studySessionLimiter,
+  (request) => {
+    // Use user ID from token as identifier for more accurate limiting
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'fallback-secret') as {
+          userId: string;
+        };
+        return `user:${decoded.userId}`;
+      }
+    } catch {
+      // Fall back to IP-based limiting
+    }
+    const forwarded = request.headers.get('x-forwarded-for');
+    return forwarded ? forwarded.split(',')[0] : 'unknown';
+  }
+)(withErrorHandling(performanceMiddleware('study-session-get')(async function(request: NextRequest) {
   try {
     const userId = await getUserFromToken(request);
     
-    // Add performance timing
-    const startTime = Date.now();
-    const sessions = await AtlasUserService.getStudySessionsWithTimeData(userId);
-    const endTime = Date.now();
-    
-    // Log slow queries for optimization
-    if (endTime - startTime > 1000) {
-      console.warn(`⚠️ Slow query: getStudySessionsWithTimeData took ${endTime - startTime}ms`);
-    }
+    // Use performance monitor for database query timing
+    const sessions = await performanceMonitor.timeFunction(
+      'getStudySessionsWithTimeData',
+      () => AtlasUserService.getStudySessionsWithTimeData(userId),
+      { userId: userId.substring(0, 8) + '...' } // Log partial userId for privacy
+    );
 
     return NextResponse.json({
       sessions,
       _meta: {
         count: sessions.length,
-        queryTime: endTime - startTime
+        cached: true // Indicate this response can be cached
       }
     }, {
       headers: {
@@ -191,7 +231,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Get study sessions error:', error);
     
-    // Provide more specific error messages
+    // Handle authentication errors specifically
     if (error instanceof Error && error.name === 'JsonWebTokenError') {
       return NextResponse.json(
         { error: 'Invalid authentication token' },
@@ -207,11 +247,11 @@ export async function GET(request: NextRequest) {
         { error: 'No authentication token provided' },
         { status: 401 }
       );
-    } else {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Failed to retrieve study sessions' },
-        { status: 500 }
-      );
     }
+    
+    // For database errors, let the error handler deal with it
+    throw error;
   }
-}
+})));
+
+export { rateLimitedGET as GET };

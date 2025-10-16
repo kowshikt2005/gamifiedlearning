@@ -2,8 +2,9 @@
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { GenerateQuizQuestionsOutput } from '@/ai/flows/generate-quiz-questions-from-pdf';
-import { useGamification } from '@/contexts/gamification-context';
+// import { useGamification } from '@/contexts/gamification-context'; // Removed to prevent infinite loops
 import { useAuth } from '@/contexts/auth-context';
+import { sessionSaver } from '@/lib/session-saver';
 
 type TaskInfo = {
     name: string;
@@ -87,8 +88,8 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
     // Timer interval ref - persistent across renders
     const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     
-    // Integrate with gamification system
-    const { addStudySessionPoints, incrementStreak, checkQuestProgress, powerUps, addStudyTime } = useGamification();
+    // Gamification integration removed - handled in feedback/results pages to prevent infinite loops
+    // const { addStudySessionPoints, incrementStreak, checkQuestProgress, powerUps, addStudyTime } = useGamification();
 
     // Load completed sessions from localStorage on initial client-side render
     useEffect(() => {
@@ -175,29 +176,58 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
         // Gamification: Penalties handled in session completion
     }, []);
 
+    // Track which sessions have been processed to prevent duplicates
+    const processedSessionsRef = useRef<Set<string>>(new Set());
+    const pendingSessionsRef = useRef<Set<string>>(new Set());
+    
     const addCompletedSession = useCallback(async (session: CompletedSession) => {
         if (!user) {
             console.warn('No user found, cannot save study session');
             return;
         }
 
-        setCompletedSessions((prev: CompletedSession[]) => {
-            // Avoid adding duplicates
-            if (prev.find((s: CompletedSession) => s.id === session.id)) {
-                return prev;
-            }
-            return [...prev, session]
-        });
+        // Check if already processed or currently being processed
+        if (processedSessionsRef.current.has(session.id)) {
+            console.log('⚠️ Session already processed, skipping:', session.id);
+            return;
+        }
+        
+        if (pendingSessionsRef.current.has(session.id)) {
+            console.log('⚠️ Session already being processed, skipping:', session.id);
+            return;
+        }
+        
+        // Mark as pending immediately to prevent any duplicate calls
+        pendingSessionsRef.current.add(session.id);
+        processedSessionsRef.current.add(session.id);
+        console.log('📝 Processing session:', session.id);
+
+        // Check for duplicates in state before updating
+        const existingSession = completedSessions.find((s: CompletedSession) => s.id === session.id);
+        if (existingSession) {
+            // eslint-disable-next-line no-console
+            console.log('⚠️ Session already in state, skipping:', session.id);
+            return;
+        }
+
+        // Add to state (only if not duplicate)
+        setCompletedSessions((prev: CompletedSession[]) => [...prev, session]);
         
         // Calculate study time in minutes
         const studyTimeInMinutes = Math.floor(studyDuration / 60);
         
-        // Save to database - but don't block the UI if it fails
+        // Save to database using robust session saver
         const saveToDatabase = async () => {
             try {
                 const token = getValidToken();
                 if (!token) {
                     console.warn('No valid auth token found, skipping database save');
+                    return;
+                }
+
+                // Check if already processed by session saver
+                if (sessionSaver.isProcessed(session.id)) {
+                    console.log('⚠️ Session already processed by session saver:', session.id);
                     return;
                 }
 
@@ -213,9 +243,9 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
                 const sessionData = {
                     id: session.id || `session_${Date.now()}`,
                     taskName: session.taskName || 'Study Session',
-                    duration: Math.max(1, Math.floor(studyTimeInMinutes)), // Ensure positive integer
-                    score: Math.max(0, Math.min(100, calculatedScore)), // Calculate from quiz answers
-                    points: Math.max(0, Math.floor(session.points || 0)), // Ensure positive integer
+                    duration: Math.max(1, Math.floor(studyTimeInMinutes)),
+                    score: Math.max(0, Math.min(100, calculatedScore)),
+                    points: Math.max(0, Math.floor(session.points || 0)),
                     quizAnswers: (quizAnswers || []).map((qa: QuizAnswer) => {
                         const isCorrect = quizQuestions && qa.questionIndex < quizQuestions.length 
                             ? quizQuestions[qa.questionIndex].answer === qa.answer
@@ -228,58 +258,24 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
                     })
                 };
 
-                // Attempting to save study session to database
-
-                const response = await fetch('/api/user/study-session', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify(sessionData),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.text();
-                    let errorMessage = 'Failed to save study session';
-                    
-                    try {
-                        const errorObj = JSON.parse(errorData);
-                        errorMessage = errorObj.error || errorMessage;
-                    } catch {
-                        // If parsing fails, use the raw error data
-                        errorMessage = errorData || errorMessage;
-                    }
-                    
-                    console.error('Failed to save study session:', response.status, errorMessage);
-                } else {
-                    await response.json();
-                    // Study session saved successfully - no need to log in production
-                }
+                // Use robust session saver to prevent duplicates
+                await sessionSaver.saveSession(sessionData, token);
+                
             } catch (error) {
                 // Silently handle database save errors - don't show to user
-                // The session is still saved locally and the user can continue
                 console.warn('Study session save failed (continuing with local storage):', error instanceof Error ? error.message : 'Unknown error');
             }
         };
 
         // Save in background without blocking UI
-        saveToDatabase();
+        saveToDatabase().finally(() => {
+            // Remove from pending set when done
+            pendingSessionsRef.current.delete(session.id);
+        });
         
-        // Gamification: Add points for completing session using new system
-        const has2xPowerUp = powerUps.some(p => p.id === 'double-points' && p.active);
-        addStudySessionPoints(studyTimeInMinutes, true, has2xPowerUp);
-        
-        // Update quest progress
-        checkQuestProgress('quiz-5', 1);
-        checkQuestProgress('study-60', studyTimeInMinutes); // Use actual minutes studied
-        
-        // Increment streak
-        incrementStreak();
-        
-        // Add study time to total
-        addStudyTime(studyTimeInMinutes);
-    }, [user, studyDuration, quizAnswers, addStudySessionPoints, checkQuestProgress, incrementStreak, addStudyTime, powerUps, getValidToken, quizQuestions]);
+        // Note: Gamification points are handled separately in the feedback page
+        // This prevents duplicate point additions and dependency issues
+    }, [user?.username, studyDuration, quizAnswers, quizQuestions, getValidToken]); // Include quiz data for database save
 
     // Sync timer duration with study duration
     useEffect(() => {

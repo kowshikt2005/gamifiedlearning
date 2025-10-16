@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Configure for large file uploads
 export const runtime = 'nodejs';
-export const maxDuration = 300; // 5 minutes for large files
+export const maxDuration = 600; // 10 minutes for large files with Gemini 2.5 Flash
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB - Optimized for Gemini 2.5 Flash
 
 export async function POST(request: NextRequest) {
   try {
     // Add timeout protection for large files
     const timeoutPromise = new Promise<never>((_, reject) => 
-      setTimeout(() => reject(new Error('Upload timeout - file too large or connection slow')), 4 * 60 * 1000)
+      setTimeout(() => reject(new Error('Upload timeout - file too large or connection slow')), 8 * 60 * 1000) // 8 minutes for 100MB files
     );
 
     const uploadPromise = async () => {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json(
           { 
-            error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit.`,
+            error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit. Gemini 2.5 Flash can handle large documents efficiently.`,
             maxSize: MAX_FILE_SIZE,
             actualSize: file.size
           },
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Warn about large files that might timeout
-      if (file.size > 20 * 1024 * 1024) { // 20MB
-        console.warn(`Processing large PDF: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+      // Warn about large files that might take longer to process
+      if (file.size > 50 * 1024 * 1024) { // 50MB
+        console.warn(`Processing large PDF with Gemini 2.5 Flash: ${(file.size / 1024 / 1024).toFixed(1)}MB - may take 5-10 minutes`);
       }
 
       // Process file in chunks for large files to prevent memory issues

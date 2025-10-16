@@ -15,7 +15,7 @@ export default function FeedbackPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, quizQuestions, quizAnswers, coinsUsed, studyDuration, penaltyPoints, resetSession, addCompletedSession } = useStudySession();
-    const { points, level, streak, addPoints, completeChallenge } = useGamification();
+    const { points, level, streak, addQuizPoints, completeChallenge, awardBonusCoin } = useGamification();
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
@@ -61,49 +61,77 @@ export default function FeedbackPage() {
         }, 0);
     }, [quizQuestions, quizAnswers]);
     
-    const quizPoints = useMemo(() => score * 10, [score]); // 10 points per correct answer
-    const coinPenalty = useMemo(() => coinsUsed * 25, [coinsUsed]); // 25 points penalty per coin used
-    const studyTimeBonus = useMemo(() => Math.floor(studyDuration / 60) * 2, [studyDuration]); // 2 points per minute studied
-    const perfectScoreBonus = useMemo(() => {
-        if (quizQuestions && score === quizQuestions.length) {
-            return 50; // 50 bonus points for perfect score
-        }
-        return 0;
-    }, [quizQuestions, score]);
+    // ENHANCED SCORING SYSTEM with new gamification rules
+    const correctAnswers = score;
+    const wrongAnswers = quizQuestions ? quizQuestions.length - score : 0;
+    const totalQuestions = quizQuestions ? quizQuestions.length : 0;
     
-    const finalPoints = useMemo(() => {
-        return quizPoints + studyTimeBonus + perfectScoreBonus - coinPenalty - penaltyPoints;
-    }, [quizPoints, studyTimeBonus, perfectScoreBonus, coinPenalty, penaltyPoints]);
+    const [finalPoints, setFinalPoints] = useState(0);
+    const [isProcessingComplete, setIsProcessingComplete] = useState(false);
 
-    // Add points when final points are calculated (only once)
+    // Single useEffect to handle all processing - runs only once when data is ready
     useEffect(() => {
-        let hasAddedPoints = false;
+        // Prevent multiple executions
+        if (isProcessingComplete) return;
+        if (!isClient) return;
+        if (!quizQuestions || quizQuestions.length === 0) return;
+        if (quizAnswers.length === 0) return;
+        if (!taskInfo || !params.id) return;
         
-        if (finalPoints !== 0 && !hasAddedPoints) {
-            addPoints(finalPoints);
-            hasAddedPoints = true;
-            
-            // Check for perfect score challenge
-            if (quizQuestions && score === quizQuestions.length) {
-                completeChallenge('perfect-score');
-            }
-            
-            // Check for speed demon challenge (quiz completed in under 5 minutes)
-            if (studyDuration < 300) {
-                completeChallenge('speed-demon');
-            }
+        // Mark as processing to prevent re-runs
+        setIsProcessingComplete(true);
+        
+        console.log('🎯 Processing quiz completion (one-time):', {
+            taskId: params.id,
+            correctAnswers,
+            wrongAnswers,
+            coinsUsed,
+            totalQuestions,
+            studyDuration
+        });
+        
+        // Calculate points
+        const quizPoints = addQuizPoints(
+            correctAnswers, 
+            wrongAnswers, 
+            coinsUsed, 
+            totalQuestions, 
+            studyDuration
+        );
+        
+        const totalPoints = quizPoints - penaltyPoints;
+        setFinalPoints(totalPoints);
+        
+        // Save session (only once)
+        addCompletedSession({
+            id: params.id as string,
+            taskName: taskInfo.name,
+            points: totalPoints
+        });
+        
+        // Award achievements
+        if (correctAnswers === totalQuestions && totalQuestions > 0) {
+            awardBonusCoin();
+            completeChallenge('perfect-score');
         }
-    }, [finalPoints, addPoints, quizQuestions, score, studyDuration, completeChallenge]);
+        
+        if (studyDuration < 300) {
+            completeChallenge('speed-demon');
+        }
+        
+        console.log('✅ Quiz processing complete');
+        
+    }, [
+        isProcessingComplete, 
+        isClient, 
+        quizQuestions?.length, 
+        quizAnswers.length, 
+        taskInfo?.name, 
+        params.id
+    ]);
 
-    useEffect(() => {
-        if(taskInfo && params.id) {
-            addCompletedSession({
-                id: params.id as string,
-                taskName: taskInfo.name,
-                points: finalPoints
-            })
-        }
-    }, [taskInfo, params.id, finalPoints, addCompletedSession])
+    // Save session immediately after points are calculated (in the points calculation useEffect)
+    // No separate useEffect needed to prevent infinite loops
 
     const formatDuration = useCallback((seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -188,23 +216,25 @@ export default function FeedbackPage() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <span>Quiz Performance ({score}/{quizQuestions.length} correct)</span>
-                                <span className="font-bold text-green-600">+{quizPoints}</span>
+                                <span>Correct Answers ({correctAnswers} × 5 points)</span>
+                                <span className="font-bold text-green-600">+{correctAnswers * 5}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span>Study Time Bonus ({Math.floor(studyDuration / 60)} minutes)</span>
-                                <span className="font-bold text-blue-600">+{studyTimeBonus}</span>
-                            </div>
-                            {perfectScoreBonus > 0 && (
+                            {wrongAnswers > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>Perfect Score Bonus! 🎉</span>
-                                    <span className="font-bold text-purple-600">+{perfectScoreBonus}</span>
+                                    <span>Wrong Answers ({wrongAnswers} × -1 point)</span>
+                                    <span className="font-bold text-red-600">-{wrongAnswers}</span>
                                 </div>
                             )}
-                            {coinPenalty > 0 && (
+                            {coinsUsed > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>Hint Penalties ({coinsUsed} hints used)</span>
-                                    <span className="font-bold text-red-600">-{coinPenalty}</span>
+                                    <span>Answer Reveals ({coinsUsed} × -10 points)</span>
+                                    <span className="font-bold text-red-600">-{coinsUsed * 10}</span>
+                                </div>
+                            )}
+                            {correctAnswers === totalQuestions && totalQuestions > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span>Perfect Score Bonus! 🎉</span>
+                                    <span className="font-bold text-purple-600">+50</span>
                                 </div>
                             )}
                             {penaltyPoints > 0 && (

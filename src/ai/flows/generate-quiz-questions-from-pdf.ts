@@ -58,7 +58,7 @@ export async function generateQuizQuestions(input: GenerateQuizQuestionsInput, u
     const result = await Promise.race([
       generateQuizQuestionsFlow(input),
       new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Quiz generation timeout')), 4 * 60 * 1000) // 4 minute timeout
+        setTimeout(() => reject(new Error('Quiz generation timeout')), 8 * 60 * 1000) // 8 minute timeout for large PDFs
       )
     ]);
     

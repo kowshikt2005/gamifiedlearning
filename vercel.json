@@ -12,13 +12,13 @@
       "maxDuration": 60
     },
     "app/api/upload/**/*.ts": {
-      "maxDuration": 300
+      "maxDuration": 600
     },
     "app/api/quiz/**/*.ts": {
-      "maxDuration": 300
+      "maxDuration": 600
     },
     "app/api/ai/**/*.ts": {
-      "maxDuration": 300
+      "maxDuration": 600
     }
   },
   "env": {

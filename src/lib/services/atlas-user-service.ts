@@ -6,6 +6,7 @@
  */
 
 import { getDatabase } from '@/lib/mongodb';
+import { resilientDb } from '@/lib/db-resilience';
 import { User as LegacyUser, UserProgress, StudySession, defaultUserProgress } from '@/lib/models/user';
 import bcrypt from 'bcryptjs';
 import { ObjectId, Int32 } from 'mongodb';
@@ -23,7 +24,7 @@ interface AtlasUser {
 
 export class AtlasUserService {
   private static async getUsersCollection() {
-    const db = await getDatabase();
+    const db = await resilientDb.getDatabase();
     return db.collection<AtlasUser>('users');
   }
 
@@ -341,7 +342,7 @@ export class AtlasUserService {
   }
 
   /**
-   * Get study sessions with time data (from tasks collection)
+   * Get study sessions with time data (from tasks collection) - OPTIMIZED
    */
   static async getStudySessionsWithTimeData(userId: string): Promise<Array<{
     date: string;
@@ -351,27 +352,70 @@ export class AtlasUserService {
   }>> {
     const db = await getDatabase();
     const tasks = db.collection('tasks');
-    const quizzes = db.collection('quiz');
     
-    const userTasks = await tasks
-      .find({ userId: new ObjectId(userId), status: 'completed' })
-      .sort({ createdAt: -1 })
-      .toArray();
+    // Use aggregation pipeline for better performance - single query instead of N+1
+    const pipeline = [
+      {
+        $match: { 
+          userId: new ObjectId(userId), 
+          status: 'completed' 
+        }
+      },
+      {
+        $lookup: {
+          from: 'quiz',
+          localField: 'sessionId',
+          foreignField: 'sessionId',
+          as: 'quizData'
+        }
+      },
+      {
+        $project: {
+          date: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$createdAt'
+            }
+          },
+          duration: {
+            $cond: {
+              if: { $type: '$studyTime' },
+              then: '$studyTime',
+              else: 0
+            }
+          },
+          score: {
+            $cond: {
+              if: { $gt: [{ $size: '$quizData' }, 0] },
+              then: { $arrayElemAt: ['$quizData.score', 0] },
+              else: 0
+            }
+          },
+          points: {
+            $cond: {
+              if: { $type: '$pointsEarned' },
+              then: '$pointsEarned',
+              else: 0
+            }
+          }
+        }
+      },
+      {
+        $sort: { date: -1 }
+      },
+      {
+        $limit: 100 // Limit to recent 100 sessions for performance
+      }
+    ];
 
-    const sessions = [];
-    for (const task of userTasks) {
-      // Get quiz score for this session
-      const quiz = await quizzes.findOne({ sessionId: task.sessionId });
-      
-      sessions.push({
-        date: task.createdAt.toISOString().split('T')[0],
-        duration: task.studyTime ? (typeof task.studyTime === 'number' ? task.studyTime : task.studyTime.valueOf()) : 0,
-        score: quiz?.score || 0,
-        points: task.pointsEarned ? (typeof task.pointsEarned === 'number' ? task.pointsEarned : task.pointsEarned.valueOf()) : 0
-      });
-    }
-
-    return sessions;
+    const sessions = await tasks.aggregate(pipeline).toArray();
+    
+    return sessions.map(session => ({
+      date: session.date,
+      duration: Number(session.duration) || 0,
+      score: Number(session.score) || 0,
+      points: Number(session.points) || 0
+    }));
   }
 
   // Placeholder methods for badge/quest/achievement management
