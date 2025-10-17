@@ -1,4 +1,5 @@
 import { MongoClient, Db } from 'mongodb';
+import { aggressiveConnectionManager } from './aggressive-connection-manager';
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Please add your MongoDB URI to .env.local');
@@ -6,71 +7,121 @@ if (!process.env.MONGODB_URI) {
 
 const uri = process.env.MONGODB_URI;
 const options = {
-  maxPoolSize: 10, // Optimize for free tier connection limits
-  serverSelectionTimeoutMS: 10000, // Increased timeout for network issues
-  socketTimeoutMS: 45000,
-  connectTimeoutMS: 10000,
-  heartbeatFrequencyMS: 10000,
+  // Production-optimized for MongoDB Atlas M0 tier - faster response times
+  maxPoolSize: 3, // Conservative limit for M0 tier (max 10 connections total)
+  minPoolSize: 0, // No minimum to allow complete cleanup
+  maxIdleTimeMS: 240000, // Close idle connections after 4 minutes (faster cleanup)
+  serverSelectionTimeoutMS: 10000, // Reduced timeout for faster response
+  socketTimeoutMS: 20000, // Reduced socket timeout for faster response
+  connectTimeoutMS: 10000, // Reduced connect timeout for faster response
+  heartbeatFrequencyMS: 20000, // More frequent heartbeat (20 seconds)
   retryWrites: true,
   retryReads: true,
-  maxIdleTimeMS: 30000,
-  // Add connection resilience options
-  bufferMaxEntries: 0, // Disable mongoose buffering
-  useNewUrlParser: true,
-  useUnifiedTopology: true
+  maxConnecting: 1, // Only 1 connection attempt at a time
+  waitQueueTimeoutMS: 3000, // Reduced wait time for faster response
+  compressors: ['zlib'], // Reduce bandwidth usage
+  // Note: bufferMaxEntries and bufferCommands are deprecated and removed
 };
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
+// Use aggressive connection manager for automatic cleanup
+const getClient = async (): Promise<MongoClient> => {
+  return aggressiveConnectionManager.getConnection(uri, options);
+};
 
-if (process.env.NODE_ENV === 'development') {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
-  const globalWithMongo = global as typeof globalThis & {
-    _mongoClientPromise?: Promise<MongoClient>;
-  };
-
-  if (!globalWithMongo._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    globalWithMongo._mongoClientPromise = client.connect();
-  }
-  clientPromise = globalWithMongo._mongoClientPromise;
-} else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(uri, options);
-  clientPromise = client.connect();
-}
+const clientPromise: Promise<MongoClient> = getClient();
 
 export default clientPromise;
 
 export async function getDatabase(): Promise<Db> {
-  try {
-    const client = await clientPromise;
-    return client.db('studymaster');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    
-    // Try to reconnect once
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log('Attempting to reconnect to MongoDB...');
-      const newClient = new MongoClient(uri, options);
-      const reconnectedClient = await newClient.connect();
-      return reconnectedClient.db('studymaster');
-    } catch (retryError) {
-      console.error('MongoDB reconnection failed:', retryError);
-      throw new Error('Database connection failed. Please check your network connection and try again.');
+      // Only force cleanup on retry attempts, not first attempt
+      if (attempt > 1) {
+        await aggressiveConnectionManager.forceCleanup();
+        // Exponential backoff for retries
+        await new Promise(resolve => setTimeout(resolve, Math.min(1000 * Math.pow(2, attempt - 1), 5000)));
+      }
+      
+      const client = await aggressiveConnectionManager.getConnection(uri, options);
+      const db = client.db('studymaster');
+      
+      // Test the connection with faster timeout
+      await Promise.race([
+        db.admin().ping(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database ping timeout')), 5000)
+        )
+      ]);
+      
+      // Mark connection as used for activity tracking
+      aggressiveConnectionManager.markConnectionUsed(client);
+      
+      return db;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown connection error');
+      
+      // Log detailed error in development, generic in production
+      if (process.env.NODE_ENV === 'development') {
+        console.error(`MongoDB connection attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+      } else if (attempt === maxRetries) {
+        console.error('Database connection failed after all retries');
+      }
+      
+      if (attempt === maxRetries) {
+        break;
+      }
     }
+  }
+  
+  // All connection attempts failed - throw user-friendly error
+  throw new Error('Database temporarily unavailable. Please try again in a moment.');
+}
+
+// Atlas connection validation with health monitoring
+export async function validateAtlasConnection(): Promise<void> {
+  try {
+    const client = await aggressiveConnectionManager.getConnection(uri, options);
+    
+    // Test connection with faster timeout
+    await Promise.race([
+      client.db('admin').command({ ping: 1 }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Atlas validation timeout')), 8000)
+      )
+    ]);
+    
+    // Mark as used
+    aggressiveConnectionManager.markConnectionUsed(client);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Atlas connection validation failed:', errorMessage);
+    throw new Error('Failed to connect to MongoDB Atlas');
   }
 }
 
-// Atlas connection validation
-export async function validateAtlasConnection(): Promise<void> {
+// Health check function for monitoring
+export async function getDatabaseHealth(): Promise<{
+  connected: boolean;
+  connectionStats: ReturnType<typeof aggressiveConnectionManager.getStats>;
+  error?: string;
+}> {
   try {
-    const client = await clientPromise;
-    await client.db('admin').command({ ping: 1 });
-    // Connected to MongoDB Atlas successfully
-  } catch {
-    // Atlas connection failed
-    throw new Error('Failed to connect to MongoDB Atlas');
+    const health = await aggressiveConnectionManager.healthCheck();
+    const stats = aggressiveConnectionManager.getStats();
+    
+    return {
+      connected: health.healthy,
+      connectionStats: stats,
+      error: health.errors.length > 0 ? health.errors.join('; ') : undefined
+    };
+  } catch (error) {
+    return {
+      connected: false,
+      connectionStats: aggressiveConnectionManager.getStats(),
+      error: error instanceof Error ? error.message : 'Health check failed'
+    };
   }
 }

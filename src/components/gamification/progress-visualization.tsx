@@ -18,12 +18,23 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function ProgressVisualization() {
-  const { points, level, streak, dailyGoal, dailyProgress, totalStudyTime, quests, challenges } = useGamification();
+  const gamification = useGamification();
   const { getTrendData, getStats, isLoading, fetchSessionData } = useStudyData();
 
   // Get real study time trend data (last 7 days)
   const studyTrendData = getTrendData(7);
-  const stats = getStats;
+  const studyStats = getStats;
+
+  // Extract values from gamification stats
+  const gamificationStats = gamification.stats;
+  const points = gamificationStats?.points || 0;
+  const level = gamificationStats?.level || 1;
+  const streak = gamificationStats?.streak.currentStreak || 0;
+  const dailyGoal = gamificationStats?.dailyGoal || 30;
+  const dailyProgress = gamificationStats?.dailyProgress || 0;
+  const totalStudyTime = gamificationStats?.totalStudyTime || 0;
+  const quests = gamificationStats?.quests || [];
+  const challenges = gamificationStats?.challenges || [];
 
   // Calculate completion rates
   const completedQuests = quests.filter(q => q.completed).length;
@@ -156,19 +167,19 @@ export function ProgressVisualization() {
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Total Time</p>
-              <p className="text-lg font-semibold">{Math.floor(stats.totalStudyTime / 60)}h {stats.totalStudyTime % 60}m</p>
+              <p className="text-lg font-semibold">{Math.floor(studyStats.totalStudyTime / 60)}h {studyStats.totalStudyTime % 60}m</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Sessions</p>
-              <p className="text-lg font-semibold">{stats.totalSessions}</p>
+              <p className="text-lg font-semibold">{studyStats.totalSessions}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Avg Score</p>
-              <p className="text-lg font-semibold">{stats.averageScore.toFixed(1)}%</p>
+              <p className="text-lg font-semibold">{studyStats.averageScore.toFixed(1)}%</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Today</p>
-              <p className="text-lg font-semibold">{stats.todaysStudyTime}m</p>
+              <p className="text-lg font-semibold">{studyStats.todaysStudyTime}m</p>
             </div>
           </div>
           

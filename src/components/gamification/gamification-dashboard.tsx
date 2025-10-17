@@ -25,30 +25,53 @@ import { StreakCalendar } from './streak-calendar';
 
 export function GamificationDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
-
-  // Get the gamification context
   const gamification = useGamification();
 
-  const getLevelProgress = () => {
-    // Calculate points needed for current level
-    const pointsNeededForCurrentLevel = 100 + (gamification.level - 1) * 50;
-    // Calculate points in current level
-    const pointsInCurrentLevel = gamification.points % pointsNeededForCurrentLevel;
-    return pointsInCurrentLevel;
-  };
+  // Handle loading and error states
+  if (gamification.isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading your progress...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const getLevelProgressPercentage = () => {
-    // Calculate points needed for current level
-    const pointsNeededForCurrentLevel = 100 + (gamification.level - 1) * 50;
-    // Calculate percentage
-    return (getLevelProgress() / pointsNeededForCurrentLevel) * 100;
-  };
+  if (gamification.error) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">Failed to load gamification data</p>
+          <button 
+            onClick={gamification.refreshStats}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!gamification.stats) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-muted-foreground">No gamification data available</p>
+      </div>
+    );
+  }
+
+  const { stats } = gamification;
+  const levelProgress = gamification.calculateLevelProgress();
 
   const getStreakIcon = () => {
-    if (gamification.streak >= 30) return <Crown className="h-6 w-6 text-yellow-500" />;
-    if (gamification.streak >= 14) return <Medal className="h-6 w-6 text-purple-500" />;
-    if (gamification.streak >= 7) return <Flame className="h-6 w-6 text-red-500" />;
-    if (gamification.streak >= 3) return <Zap className="h-6 w-6 text-orange-500" />;
+    const streak = stats.streak.currentStreak;
+    if (streak >= 30) return <Crown className="h-6 w-6 text-yellow-500" />;
+    if (streak >= 14) return <Medal className="h-6 w-6 text-purple-500" />;
+    if (streak >= 7) return <Flame className="h-6 w-6 text-red-500" />;
+    if (streak >= 3) return <Zap className="h-6 w-6 text-orange-500" />;
     return <Circle className="h-6 w-6 text-gray-400" />;
   };
 
@@ -61,12 +84,12 @@ export function GamificationDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Level</p>
-                <p className="text-2xl font-bold">{gamification.level}</p>
+                <p className="text-2xl font-bold">{stats.level}</p>
               </div>
               <Rocket className="h-8 w-8 text-primary" />
             </div>
-            <Progress value={getLevelProgressPercentage()} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-1">{getLevelProgress()}/{100 + (gamification.level - 1) * 50} XP</p>
+            <Progress value={levelProgress.percentage} className="mt-2" />
+            <p className="text-xs text-muted-foreground mt-1">{levelProgress.current}/{levelProgress.current + levelProgress.needed} XP</p>
           </CardContent>
         </Card>
         
@@ -75,7 +98,7 @@ export function GamificationDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Points</p>
-                <p className="text-2xl font-bold">{gamification.points}</p>
+                <p className="text-2xl font-bold">{stats.points}</p>
               </div>
               <Star className="h-8 w-8 text-yellow-500 fill-yellow-500" />
             </div>
@@ -87,7 +110,7 @@ export function GamificationDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Streak</p>
-                <p className="text-2xl font-bold">{gamification.streak}</p>
+                <p className="text-2xl font-bold">{stats.streak.currentStreak}</p>
               </div>
               {getStreakIcon()}
             </div>
@@ -99,11 +122,11 @@ export function GamificationDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Daily Goal</p>
-                <p className="text-2xl font-bold">{gamification.dailyProgress}/{gamification.dailyGoal}</p>
+                <p className="text-2xl font-bold">{stats.dailyProgress}/{stats.dailyGoal}</p>
               </div>
               <Target className="h-8 w-8 text-green-500" />
             </div>
-            <Progress value={(gamification.dailyProgress / gamification.dailyGoal) * 100} className="mt-2" />
+            <Progress value={(stats.dailyProgress / stats.dailyGoal) * 100} className="mt-2" />
           </CardContent>
         </Card>
       </div>
@@ -181,17 +204,17 @@ export function GamificationDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {gamification.badges.filter(b => b.earned).slice(0, 3).map(badge => (
-                    <div key={badge.id} className="flex items-center gap-3 p-2 bg-muted rounded-lg">
-                      <span className="text-2xl">{badge.icon}</span>
+                  {gamification.recentAchievements.slice(0, 3).map(achievement => (
+                    <div key={achievement.id} className="flex items-center gap-3 p-2 bg-muted rounded-lg">
+                      <span className="text-2xl">{achievement.icon}</span>
                       <div>
-                        <p className="font-medium">{badge.name}</p>
-                        <p className="text-sm text-muted-foreground">{badge.description}</p>
+                        <p className="font-medium">{achievement.name}</p>
+                        <p className="text-sm text-muted-foreground">{achievement.description}</p>
                       </div>
                     </div>
                   ))}
-                  {gamification.badges.filter(b => b.earned).length === 0 && (
-                    <p className="text-muted-foreground text-center py-4">No achievements yet. Start studying to earn your first badge!</p>
+                  {gamification.recentAchievements.length === 0 && (
+                    <p className="text-muted-foreground text-center py-4">No achievements yet. Start studying to earn your first achievement!</p>
                   )}
                 </div>
               </CardContent>
@@ -206,7 +229,7 @@ export function GamificationDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {gamification.quests.filter(q => !q.completed).slice(0, 3).map(quest => (
+                  {gamification.activeQuests.slice(0, 3).map(quest => (
                     <div key={quest.id} className="space-y-2">
                       <div className="flex items-center gap-3">
                         <span className="text-xl">{quest.icon}</span>
@@ -220,7 +243,7 @@ export function GamificationDashboard() {
                       <p className="text-xs text-muted-foreground text-right">{quest.progress}/{quest.target}</p>
                     </div>
                   ))}
-                  {gamification.quests.filter(q => !q.completed).length === 0 && (
+                  {gamification.activeQuests.length === 0 && (
                     <p className="text-muted-foreground text-center py-4">No active quests. Complete challenges to unlock new ones!</p>
                   )}
                 </div>
@@ -239,7 +262,7 @@ export function GamificationDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {gamification.badges.map(badge => (
+                {stats.badges.map(badge => (
                   <div 
                     key={badge.id} 
                     className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-300 ${
@@ -274,7 +297,7 @@ export function GamificationDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {gamification.quests.filter(q => !q.completed).map(quest => (
+                  {gamification.activeQuests.map(quest => (
                     <div key={quest.id} className="p-4 border rounded-lg">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3">
@@ -290,7 +313,7 @@ export function GamificationDashboard() {
                       </div>
                     </div>
                   ))}
-                  {gamification.quests.filter(q => !q.completed).length === 0 && (
+                  {gamification.activeQuests.length === 0 && (
                     <p className="text-muted-foreground text-center py-4">No active quests. Complete challenges to unlock new ones!</p>
                   )}
                 </div>
@@ -306,7 +329,7 @@ export function GamificationDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {gamification.quests.filter(q => q.completed).map(quest => (
+                  {stats.quests.filter(q => q.completed).map(quest => (
                     <div key={quest.id} className="flex items-center gap-3 p-3 bg-muted rounded-lg">
                       <span className="text-xl">{quest.icon}</span>
                       <div className="flex-1">
@@ -316,7 +339,7 @@ export function GamificationDashboard() {
                       <Badge variant="default">+{quest.reward} pts</Badge>
                     </div>
                   ))}
-                  {gamification.quests.filter(q => q.completed).length === 0 && (
+                  {stats.quests.filter(q => q.completed).length === 0 && (
                     <p className="text-muted-foreground text-center py-4">No completed quests yet. Keep studying to unlock achievements!</p>
                   )}
                 </div>
@@ -335,39 +358,43 @@ export function GamificationDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {gamification.powerUps.map(powerUp => (
-                  <div 
-                    key={powerUp.id} 
-                    className={`p-4 rounded-lg border-2 transition-all duration-300 ${
-                      powerUp.active 
-                        ? 'border-yellow-500 bg-yellow-500/10' 
-                        : 'border-muted'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">{powerUp.icon}</span>
-                        <div>
-                          <h3 className="font-medium">{powerUp.name}</h3>
-                          <p className="text-sm text-muted-foreground">{powerUp.description}</p>
-                          {powerUp.active && powerUp.endTime && (
-                            <p className="text-xs text-yellow-600 mt-1">
-                              Active until {powerUp.endTime.toLocaleTimeString()}
-                            </p>
-                          )}
+                {gamification.availablePowerUps.map(powerUp => {
+                  const isActive = gamification.hasActivePowerUp(powerUp.effect);
+                  const canAfford = stats.points >= powerUp.cost;
+                  
+                  return (
+                    <div 
+                      key={powerUp.id} 
+                      className={`p-4 rounded-lg border-2 transition-all duration-300 ${
+                        isActive 
+                          ? 'border-yellow-500 bg-yellow-500/10' 
+                          : 'border-muted'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">{powerUp.icon}</span>
+                          <div>
+                            <h3 className="font-medium">{powerUp.name}</h3>
+                            <p className="text-sm text-muted-foreground">{powerUp.description}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Cost: {powerUp.cost} points</p>
+                            {isActive && (
+                              <p className="text-xs text-yellow-600 mt-1">Currently Active</p>
+                            )}
+                          </div>
                         </div>
+                        <Button
+                          size="sm"
+                          onClick={() => gamification.purchasePowerUp(powerUp.id)}
+                          disabled={isActive || !canAfford || gamification.isLoading}
+                          className={(!canAfford || isActive) ? 'opacity-50' : ''}
+                        >
+                          {isActive ? 'Active' : canAfford ? 'Buy' : 'Need Points'}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => gamification.activatePowerUp(powerUp.id)}
-                        disabled={powerUp.active}
-                        className={powerUp.active ? 'opacity-50' : ''}
-                      >
-                        {powerUp.active ? 'Active' : 'Activate'}
-                      </Button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

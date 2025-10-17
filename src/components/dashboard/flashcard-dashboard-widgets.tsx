@@ -87,7 +87,7 @@ export function FlashcardDashboardWidgets({ className }: FlashcardDashboardWidge
     return streak;
   };
 
-  const calculateFlashcardStats = (flashcards: SavedFlashcard[]): FlashcardStats => {
+  const calculateFlashcardStats = useCallback((flashcards: SavedFlashcard[]): FlashcardStats => {
     const total = flashcards.length;
     const saved = flashcards.filter((f: SavedFlashcard) => f.status === 'saved').length;
     const known = flashcards.filter((f: SavedFlashcard) => f.status === 'known').length;
@@ -113,7 +113,7 @@ export function FlashcardDashboardWidgets({ className }: FlashcardDashboardWidge
       recentActivity,
       studyStreak,
     };
-  };
+  }, [calculateStudyStreak]);
 
   const getRecentFlashcards = (flashcards: SavedFlashcard[]): SavedFlashcard[] => {
     return flashcards

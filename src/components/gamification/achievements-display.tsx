@@ -15,13 +15,14 @@ import {
 } from 'lucide-react';
 
 export function AchievementsDisplay() {
-  const { badges, achievements, level, streak } = useGamification();
+  const gamification = useGamification();
 
   // Get earned badges and achievements
-  const earnedBadges = badges.filter(badge => badge.earned);
-  const earnedAchievements = achievements.filter(achievement => achievement.earned);
+  const earnedBadges = gamification.stats?.badges.filter(badge => badge.earned) || [];
+  const earnedAchievements = gamification.stats?.achievements.filter(achievement => achievement.earned) || [];
 
   // Get badge rarity counts
+  const badges = gamification.stats?.badges || [];
   const rarityCounts = {
     common: badges.filter(b => b.earned && b.rarity === 'common').length,
     rare: badges.filter(b => b.earned && b.rarity === 'rare').length,
@@ -31,6 +32,7 @@ export function AchievementsDisplay() {
 
   // Get streak icon
   const getStreakIcon = () => {
+    const streak = gamification.stats?.streak.currentStreak || 0;
     if (streak >= 30) return <Crown className="h-5 w-5 text-yellow-500" />;
     if (streak >= 14) return <Medal className="h-5 w-5 text-purple-500" />;
     if (streak >= 7) return <Flame className="h-5 w-5 text-red-500" />;
@@ -52,11 +54,11 @@ export function AchievementsDisplay() {
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold">{level}</p>
+                <p className="text-3xl font-bold">{gamification.stats?.level || 1}</p>
                 <p className="text-sm text-muted-foreground">Current Level</p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold">{streak}</p>
+                <p className="text-2xl font-bold">{gamification.stats?.streak.currentStreak || 0}</p>
                 <div className="flex items-center gap-1">
                   <span className="text-sm text-muted-foreground">Day Streak</span>
                   {getStreakIcon()}

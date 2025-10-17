@@ -24,7 +24,7 @@ interface SlowOperation {
   name: string;
   duration: number;
   timestamp: number;
-  metadata?: Record<string, any>;
+  metadata?: SlowOperationMetadata;
 }
 
 interface PerformanceData {
@@ -32,6 +32,14 @@ interface PerformanceData {
   slowOperations: SlowOperation[];
   totalOperations: number;
   timestamp: string;
+}
+
+interface SlowOperationMetadata {
+  method?: string;
+  path?: string;
+  userAgent?: string;
+  success?: boolean;
+  [key: string]: unknown;
 }
 
 export function PerformanceDashboard() {

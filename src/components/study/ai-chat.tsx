@@ -22,7 +22,7 @@ type Message = {
 
 // Memoize the AIChat component to prevent unnecessary re-renders
 export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
-    const { points, addPoints, checkQuestProgress } = useGamification();
+    const gamification = useGamification();
     const { timerState } = useStudySession();
     const [messages, setMessages] = useState<Message[]>([
         { role: 'bot', content: "Hello! I'm your AI Study Master 🧠✨ Ask me anything about the document!" }
@@ -107,11 +107,8 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
                     setMessages(prev => [...prev, botMessage]);
                     setStreamingMessage('');
                     
-                    // Gamification: Add points and update quest progress
-                    const pointsEarned = 5 + Math.floor(answer.length / 100); // Bonus points for longer responses
-                    addPoints(pointsEarned);
+                    // AI chat interactions are now tracked automatically by the gamification system
                     questionCountRef.current += 1;
-                    checkQuestProgress('chat-10', 1);
                     
                     // Update streak
                     setStreak(prev => prev + 1);
@@ -153,7 +150,7 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
             setIsLoading(false);
             abortControllerRef.current = null;
         }
-    }, [input, isLoading, pdfDataUri, addPoints, checkQuestProgress]);
+    }, [input, isLoading, pdfDataUri]);
     
     // Handle cancel streaming
     const handleCancelStreaming = useCallback(() => {
@@ -204,7 +201,7 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
                     </div>
                     <div className="flex items-center gap-1 bg-yellow-100 dark:bg-yellow-900/30 px-2 py-1 rounded-full">
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                        <span className="text-sm font-bold">{points}</span>
+                        <span className="text-sm font-bold">{gamification.stats?.points || 0}</span>
                     </div>
                     <div className="flex items-center gap-1 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
                         <Zap className="h-4 w-4 text-green-500" />

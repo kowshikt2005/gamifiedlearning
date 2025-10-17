@@ -1,930 +1,318 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
+import { 
+  UserStats, 
+  Achievement, 
+  Quest, 
+  Badge, 
+  Challenge, 
+  StudySession, 
+  ActivePowerUp, 
+  AVAILABLE_POWER_UPS,
+  calculateLevelFromPoints,
+  calculatePointsForNextLevel
+} from '@/lib/models/gamification';
 
-// Types for our gamification system
-export type Badge = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  earned: boolean;
-  earnedAt?: Date;
-  rarity?: 'common' | 'rare' | 'epic' | 'legendary';
-};
-
-export type PowerUp = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  active: boolean;
-  duration: number; // in seconds
-  endTime?: Date;
-  multiplier?: number; // for point multipliers
-};
-
-export type Quest = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  progress: number;
-  target: number;
-  reward: number;
-  completed: boolean;
-  completedAt?: Date;
-  category?: string;
-};
-
-export type Challenge = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  reward: number;
-  completed: boolean;
-  completedAt?: Date;
-  difficulty?: 'easy' | 'medium' | 'hard';
-};
-
-export type Achievement = {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  earned: boolean;
-  earnedAt?: Date;
-  points: number;
-};
-
+// Production-ready gamification context interface
 interface GamificationContextType {
-  points: number;
-  level: number;
-  streak: number;
-  coins: number; // Tracks answer reveals in quiz
-  badges: Badge[];
-  powerUps: PowerUp[];
-  quests: Quest[];
-  challenges: Challenge[];
-  achievements: Achievement[];
-  dailyGoal: number;
-  dailyProgress: number;
-  totalStudyTime: number;
-
+  // Core stats
+  stats: UserStats | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Computed values
+  availablePowerUps: typeof AVAILABLE_POWER_UPS;
+  activePowerUps: ActivePowerUp[];
+  recentAchievements: Achievement[];
+  activeQuests: Quest[];
+  
   // Actions
-  addPoints: (amount: number) => void;
-  addStudySessionPoints: (minutes: number, completedSuccessfully: boolean, has2xPowerUp?: boolean, quizScore?: number) => number;
-  addQuizPoints: (correctAnswers: number, wrongAnswers: number, answersRevealed: number, totalQuestions: number, timeSpent?: number) => number;
-
-  buyPowerUp: (powerUpId: string) => boolean;
-  incrementStreak: () => void;
-  resetStreak: () => void;
-  earnBadge: (badgeId: string) => void;
-  activatePowerUp: (powerUpId: string) => void;
-  completeQuest: (questId: string) => void;
-  completeChallenge: (challengeId: string) => void;
-  updateDailyProgress: (amount: number) => void;
-  checkQuestProgress: (questId: string, progress: number) => void;
-  addStudyTime: (minutes: number) => void;
-  unlockAchievement: (achievementId: string) => void;
-  calculateLevelFromPoints: (totalPoints: number) => number;
-  calculatePointsForNextLevel: (currentLevel: number, currentPoints: number) => number;
-  useCoin: () => boolean; // Returns false if coins >= 3
-  resetCoins: () => void; // Reset coins for new quiz
-  awardBonusCoin: () => void; // Award bonus coin for perfect score
-  hasBonusCoin: () => boolean; // Check if bonus coin available
-  useBonusCoin: () => void; // Use bonus coin
-  syncToDatabase: () => Promise<boolean>; // Manual sync to database
-  fetchLatestProgress: () => Promise<boolean>; // Fetch latest from database
+  processStudySession: (sessionData: {
+    taskName: string;
+    duration: number;
+    completedSuccessfully: boolean;
+    quizScore?: number;
+    aiQuestionsAsked?: number;
+  }) => Promise<{ pointsEarned: number; levelUp: boolean; newAchievements: Achievement[] } | null>;
+  
+  processQuizCompletion: (quizData: {
+    correctAnswers: number;
+    wrongAnswers: number;
+    answersRevealed: number;
+    totalQuestions: number;
+    timeSpent?: number;
+  }) => Promise<{ pointsEarned: number; newAchievements: Achievement[] } | null>;
+  
+  purchasePowerUp: (powerUpId: string) => Promise<boolean>;
+  consumeCoin: () => Promise<boolean>;
+  refreshStats: () => Promise<void>;
+  
+  // Utility functions
+  calculateLevelProgress: () => { current: number; needed: number; percentage: number };
+  hasActivePowerUp: (effect: string) => boolean;
+  getStreakCalendar: () => { date: string; hasStudy: boolean }[];
 }
-
-// Default data arrays (moved outside component to prevent recreation)
-const DEFAULT_BADGES: Badge[] = [
-  { id: 'first-quiz', name: 'First Quiz', description: 'Complete your first quiz', icon: '🎓', earned: false, rarity: 'common' },
-  { id: 'streak-7', name: 'Week Streak', description: 'Study for 7 days in a row', icon: '🔥', earned: false, rarity: 'rare' },
-  { id: 'points-100', name: 'Centurion', description: 'Earn 100 points', icon: '💯', earned: false, rarity: 'common' },
-  { id: 'perfect-score', name: 'Perfect Score', description: 'Get 100% on a quiz', icon: '🏆', earned: false, rarity: 'rare' },
-  { id: 'early-bird', name: 'Early Bird', description: 'Study before 8 AM', icon: '🐦', earned: false, rarity: 'common' },
-  { id: 'night-owl', name: 'Night Owl', description: 'Study after 10 PM', icon: '🦉', earned: false, rarity: 'common' },
-  { id: 'speed-demon', name: 'Speed Demon', description: 'Finish a quiz in under 5 minutes', icon: '⚡', earned: false, rarity: 'epic' },
-  { id: 'scholar', name: 'Scholar', description: 'Complete 10 quizzes', icon: '📚', earned: false, rarity: 'epic' },
-  { id: 'first-flashcard', name: 'First Flashcard', description: 'Create your first flashcard', icon: '📇', earned: false, rarity: 'common' },
-  { id: 'flashcard-collector', name: 'Card Collector', description: 'Create 10 flashcards', icon: '🗂️', earned: false, rarity: 'common' },
-  { id: 'flashcard-hoarder', name: 'Card Hoarder', description: 'Create 50 flashcards', icon: '📚', earned: false, rarity: 'rare' },
-  { id: 'flashcard-library', name: 'Living Library', description: 'Create 100 flashcards', icon: '🏛️', earned: false, rarity: 'epic' },
-  { id: 'knowledge-seeker', name: 'Knowledge Seeker', description: 'Master 25 flashcards', icon: '🔍', earned: false, rarity: 'rare' },
-  { id: 'knowledge-master', name: 'Knowledge Master', description: 'Master 100 flashcards', icon: '🧠', earned: false, rarity: 'epic' },
-  { id: 'flashcard-streak-7', name: 'Card Streak', description: 'Review flashcards for 7 days straight', icon: '🔥', earned: false, rarity: 'rare' },
-  { id: 'flashcard-streak-30', name: 'Card Marathon', description: 'Review flashcards for 30 days straight', icon: '🏃', earned: false, rarity: 'legendary' },
-  { id: 'active-reviewer', name: 'Active Reviewer', description: 'Review 20+ cards in a week', icon: '⚡', earned: false, rarity: 'rare' },
-];
-
-const DEFAULT_QUESTS: Quest[] = [
-  { id: 'study-60', name: 'Hour Master', description: 'Study for 60 minutes', icon: '⏰', progress: 0, target: 60, completed: false, reward: 50 },
-  { id: 'quiz-5', name: 'Quiz Master', description: 'Complete 5 quizzes', icon: '📝', progress: 0, target: 5, completed: false, reward: 75 },
-  { id: 'chat-10', name: 'Chat Champion', description: 'Ask 10 questions to AI', icon: '💬', progress: 0, target: 10, completed: false, reward: 30 },
-  { id: 'streak-30', name: 'Monthly Streak', description: 'Study for 30 days in a row', icon: '🗓️', progress: 0, target: 30, completed: false, reward: 200 },
-  { id: 'create-flashcards-10', name: 'Card Creator', description: 'Create 10 flashcards', icon: '📇', progress: 0, target: 10, completed: false, reward: 25 },
-  { id: 'master-flashcards-20', name: 'Card Master', description: 'Master 20 flashcards', icon: '🎯', progress: 0, target: 20, completed: false, reward: 40 },
-  { id: 'review-streak-7', name: 'Review Streak', description: 'Review flashcards for 7 days', icon: '🔄', progress: 0, target: 7, completed: false, reward: 35 },
-];
-
-const DEFAULT_ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-session', name: 'First Session', description: 'Complete your first study session', icon: '🎯', earned: false, points: 25 },
-  { id: 'marathon-study', name: 'Marathon Study', description: 'Study for 2 hours in one session', icon: '🏃', earned: false, points: 50 },
-  { id: 'consistent-week', name: 'Consistent Week', description: 'Study every day for a week', icon: '📅', earned: false, points: 75 },
-  { id: 'quiz-expert', name: 'Quiz Expert', description: 'Score 90% or higher on 5 quizzes', icon: '📝', earned: false, points: 100 },
-  { id: 'flashcard-apprentice', name: 'Flashcard Apprentice', description: 'Master 50% of your flashcards', icon: '🎓', earned: false, points: 50 },
-  { id: 'flashcard-expert', name: 'Flashcard Expert', description: 'Master 80% of your flashcards', icon: '🏆', earned: false, points: 100 },
-  { id: 'flashcard-master', name: 'Flashcard Master', description: 'Master 95% of your flashcards', icon: '👑', earned: false, points: 200 },
-  { id: 'ai-learning-pioneer', name: 'AI Learning Pioneer', description: 'Generate 100 AI-powered flashcards', icon: '🚀', earned: false, points: 150 },
-];
 
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
 
 export function GamificationProvider({ children }: { children: ReactNode }) {
   const { user, getValidToken } = useAuth();
-  const [points, setPoints] = useState(0);
-  const [level, setLevel] = useState(1);
-  const [streak, setStreak] = useState(0);
-  const [coins, setCoins] = useState(0); // Tracks answer reveals in quiz
-  const [dailyGoal, setDailyGoal] = useState(30); // 30 minutes default
-  const [dailyProgress, setDailyProgress] = useState(0);
-  const [totalStudyTime, setTotalStudyTime] = useState(0);
+  
+  // Production-ready state management
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [recentAchievements, setRecentAchievements] = useState<Achievement[]>([]);
+  const [activeQuests, setActiveQuests] = useState<Quest[]>([]);
 
-  const [badges, setBadges] = useState<Badge[]>(DEFAULT_BADGES);
-
-  // Initialize power-ups
-  const [powerUps, setPowerUps] = useState<PowerUp[]>([
-    { id: 'double-points', name: 'Double Points', description: 'Earn 2x points for 30 minutes', icon: '✨', active: false, duration: 1800, multiplier: 2 },
-    { id: 'time-extension', name: 'Time Extension', description: 'Add 10 minutes to your study session', icon: '⏰', active: false, duration: 0 },
-    { id: 'hint-revealer', name: 'Hint Revealer', description: 'Reveal one correct answer per quiz', icon: '💡', active: false, duration: 1800 },
-    { id: 'focus-mode', name: 'Focus Mode', description: 'Eliminate distractions for 1 hour', icon: '🎯', active: false, duration: 3600 },
-  ]);
-
-  const [quests, setQuests] = useState<Quest[]>(DEFAULT_QUESTS);
-
-  // Initialize challenges
-  const [challenges, setChallenges] = useState<Challenge[]>([
-    { id: 'speed-quiz', name: 'Speed Quiz', description: 'Complete a quiz in under 3 minutes', icon: '🏃', reward: 30, completed: false, difficulty: 'medium' },
-    { id: 'perfect-day', name: 'Perfect Day', description: 'Study for your daily goal without interruptions', icon: '⭐', reward: 45, completed: false, difficulty: 'hard' },
-    { id: 'ai-master', name: 'AI Master', description: 'Ask 5 questions in one study session', icon: '🤖', reward: 35, completed: false, difficulty: 'medium' },
-    { id: 'early-riser', name: 'Early Riser', description: 'Start studying before 6 AM', icon: '🌅', reward: 25, completed: false, difficulty: 'easy' },
-  ]);
-
-  const [achievements, setAchievements] = useState<Achievement[]>(DEFAULT_ACHIEVEMENTS);
-
-  // Sync with database when user changes
-  useEffect(() => {
-    if (user) {
-      // Safely access user.progress with fallbacks
-      const progress = user.progress || {};
-      setPoints(progress.points || 0);
-      setLevel(progress.level || 1);
-      setStreak(progress.streak || 0);
-      setCoins(0); // Reset coins for each session
-      setTotalStudyTime(progress.totalStudyTime || 0);
-      setDailyGoal(progress.dailyGoal || 30);
-      setBadges(progress.badges || DEFAULT_BADGES);
-      setQuests(progress.quests || DEFAULT_QUESTS);
-      setAchievements(progress.achievements || DEFAULT_ACHIEVEMENTS);
-
-      // Calculate daily progress (today's study time)
-      if (progress.studySessions) {
-        const today = new Date().toISOString().split('T')[0];
-        const todaysSessions = progress.studySessions.filter(
-          (session: { completedAt?: Date | string; duration?: number }) =>
-            session.completedAt && session.completedAt.toString().split('T')[0] === today
-        );
-        const todaysTime = todaysSessions.reduce((total: number, session: { duration?: number }) =>
-          total + (session.duration || 0), 0);
-        setDailyProgress(Math.min(todaysTime, progress.dailyGoal || 30));
-      }
-    } else {
-      // Reset to default values when no user or progress
-      setPoints(0);
-      setLevel(1);
-      setStreak(0);
-      setCoins(0);
-      setTotalStudyTime(0);
-      setDailyGoal(30);
-      setDailyProgress(0);
-      setBadges(DEFAULT_BADGES);
-      setQuests(DEFAULT_QUESTS);
-      setAchievements(DEFAULT_ACHIEVEMENTS);
+  // API call helper with error handling
+  const apiCall = useCallback(async (endpoint: string, options: RequestInit = {}) => {
+    const token = getValidToken();
+    if (!token) {
+      throw new Error('Authentication required');
     }
-  }, [user]); // Remove array dependencies that change on every render
 
-  // Real-time sync progress to database with validation
-  const syncToDatabase = useCallback(async () => {
+    const response = await fetch(endpoint, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }, [getValidToken]);
+
+  // Load user stats when user changes with data validation
+  const refreshStats = useCallback(async () => {
     if (!user) {
-      console.warn('No user found, skipping sync');
-      return false;
+      setStats(null);
+      setRecentAchievements([]);
+      setActiveQuests([]);
+      return;
     }
 
+    setIsLoading(true);
+    setError(null);
+
     try {
-      const token = getValidToken();
-      if (!token) {
-        console.warn('No valid auth token found, cannot sync progress');
-        return false;
+      // Fetch main stats
+      const statsResponse = await apiCall('/api/user/gamification');
+      
+      // Validate stats data to prevent garbage values
+      const statsData = statsResponse.data;
+      if (statsData && typeof statsData.points === 'number' && statsData.points < 1000000) {
+        // Only update if points seem reasonable (less than 1 million)
+        setStats(statsData);
+
+      } else {
+        console.warn('⚠️ Suspicious stats data detected, not updating:', statsData);
+        // Keep existing stats if new data seems corrupted
       }
 
-      // Format data according to database schema with strict validation
-      const progressData = {
-        points: Math.max(0, Math.floor(points || 0)),
-        level: Math.max(1, Math.floor(level || 1)),
-        streak: Math.max(0, Math.floor(streak || 0)),
-        totalStudyTime: Math.max(0, Math.floor(totalStudyTime || 0)),
-        dailyGoal: Math.max(1, Math.floor(dailyGoal || 30)),
-        badges: (badges || []).map((badge: Badge) => ({
-          id: String(badge.id || ''),
-          name: String(badge.name || ''),
-          description: String(badge.description || ''),
-          icon: String(badge.icon || ''),
-          earned: Boolean(badge.earned),
-          ...(badge.earnedAt && { earnedAt: new Date(badge.earnedAt) }),
-          ...(badge.rarity && { rarity: badge.rarity })
-        })),
-        quests: (quests || []).map((quest: Quest) => ({
-          id: String(quest.id || ''),
-          name: String(quest.name || ''),
-          description: String(quest.description || ''),
-          icon: String(quest.icon || ''),
-          progress: Math.max(0, Math.floor(quest.progress || 0)),
-          target: Math.max(1, Math.floor(quest.target || 1)),
-          reward: Math.max(0, Math.floor(quest.reward || 0)),
-          completed: Boolean(quest.completed),
-          ...(quest.completedAt && { completedAt: new Date(quest.completedAt) }),
-          ...(quest.category && { category: String(quest.category) })
-        })),
-        achievements: (achievements || []).map((achievement: Achievement) => ({
-          id: String(achievement.id || ''),
-          name: String(achievement.name || ''),
-          description: String(achievement.description || ''),
-          icon: String(achievement.icon || ''),
-          earned: Boolean(achievement.earned),
-          ...(achievement.earnedAt && { earnedAt: new Date(achievement.earnedAt) }),
-          points: Math.max(0, Math.floor(achievement.points || 0))
-        })),
-        lastStudyDate: new Date(),
-        updatedAt: new Date()
+      // Fetch recent achievements
+      const achievementsResponse = await apiCall('/api/user/gamification/achievements');
+      setRecentAchievements(achievementsResponse.data);
+
+      // Fetch active quests
+      const questsResponse = await apiCall('/api/user/gamification/quests');
+      setActiveQuests(questsResponse.data);
+
+    } catch (err) {
+      console.error('Failed to load gamification stats:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load stats');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, apiCall]);
+
+  // Load stats when user changes
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
+
+  // Process study session completion
+  const processStudySession = useCallback(async (sessionData: {
+    taskName: string;
+    duration: number;
+    completedSuccessfully: boolean;
+    quizScore?: number;
+    aiQuestionsAsked?: number;
+  }) => {
+    try {
+      setIsLoading(true);
+      const response = await apiCall('/api/user/gamification?action=study-session', {
+        method: 'POST',
+        body: JSON.stringify(sessionData),
+      });
+
+      // Refresh stats to get updated data
+      await refreshStats();
+
+      return response.data;
+    } catch (err) {
+      console.error('Failed to process study session:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process session');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiCall, refreshStats]);
+
+  // Process quiz completion with duplicate prevention
+  const processQuizCompletion = useCallback(async (quizData: {
+    correctAnswers: number;
+    wrongAnswers: number;
+    answersRevealed: number;
+    totalQuestions: number;
+    timeSpent?: number;
+  }) => {
+    try {
+      setIsLoading(true);
+      
+      // Add unique session identifier to prevent duplicate processing
+      const sessionId = `quiz_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const quizDataWithId = {
+        ...quizData,
+        sessionId
       };
-
-      // Syncing progress to database
-
-      const response = await fetch('/api/user/progress', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(progressData),
+      
+      const response = await apiCall('/api/user/gamification?action=quiz-completion', {
+        method: 'POST',
+        body: JSON.stringify(quizDataWithId),
       });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('❌ Failed to sync progress:', response.status, errorData);
-        return false;
-      } else {
-        // Progress synced successfully
-        return true;
-      }
-    } catch (error) {
-      console.error('❌ Error syncing progress:', error);
-      return false;
+      // Don't auto-refresh here to prevent garbage values in UI
+      // Stats will be refreshed when user navigates back to dashboard
+      
+      return response.data;
+    } catch (err) {
+      console.error('Failed to process quiz completion:', err);
+      setError(err instanceof Error ? err.message : 'Failed to process quiz');
+      return null;
+    } finally {
+      setIsLoading(false);
     }
-  }, [user, points, level, streak, totalStudyTime, dailyGoal, badges, quests, achievements, getValidToken]);
+  }, [apiCall]);
 
-  // Fetch latest progress from database for real-time sync
-  const [lastFetchTime, setLastFetchTime] = useState(0);
-
-  const fetchLatestProgress = useCallback(async () => {
-    if (!user) return false;
-
-    // Prevent excessive API calls - minimum 5 seconds between fetches
-    const now = Date.now();
-    if (now - lastFetchTime < 5000) {
-      // Skipping fetch - too soon since last call
-      return false;
-    }
-
-    setLastFetchTime(now);
-
+  // Purchase power-up
+  const purchasePowerUp = useCallback(async (powerUpId: string) => {
     try {
-      const token = getValidToken();
-      if (!token) return false;
-
-      const response = await fetch('/api/user/progress', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      setIsLoading(true);
+      await apiCall('/api/user/gamification?action=purchase-powerup', {
+        method: 'POST',
+        body: JSON.stringify({ powerUpId }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const progress = data.progress;
-
-        if (progress) {
-          // Successfully fetched latest progress from database
-
-          // Update local state with database values
-          setPoints(progress.points || 0);
-          setLevel(progress.level || 1);
-          setStreak(progress.streak || 0);
-          setTotalStudyTime(progress.totalStudyTime || 0);
-          setDailyGoal(progress.dailyGoal || 30);
-          setBadges(progress.badges || DEFAULT_BADGES);
-          setQuests(progress.quests || DEFAULT_QUESTS);
-          setAchievements(progress.achievements || DEFAULT_ACHIEVEMENTS);
-
-          return true;
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error fetching latest progress:', error);
+      // Refresh stats to get updated data
+      await refreshStats();
+      return true;
+    } catch (err) {
+      console.error('Failed to purchase power-up:', err);
+      setError(err instanceof Error ? err.message : 'Failed to purchase power-up');
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-    return false;
-  }, [user, getValidToken, lastFetchTime]); // Removed array dependencies
+  }, [apiCall, refreshStats]);
 
-  // Smart sync strategy - only sync when data actually changes
-  const [lastSyncTime, setLastSyncTime] = useState(0);
-  const [lastSyncedData, setLastSyncedData] = useState<string>('');
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  // Consume coin for answer reveal
+  const consumeCoin = useCallback(async () => {
+    try {
+      await apiCall('/api/user/gamification?action=use-coin', {
+        method: 'POST',
+      });
 
-  useEffect(() => {
-    if (user && points >= 0 && !isInitialLoad) {
-      // Create a hash of current data to detect actual changes
-      const currentData = JSON.stringify({ points, level, streak, totalStudyTime });
-
-      // Only sync if data actually changed and enough time has passed
-      const now = Date.now();
-      const hasDataChanged = currentData !== lastSyncedData;
-      const enoughTimePassed = now - lastSyncTime > 15000; // 15 seconds minimum
-
-      if (hasDataChanged && enoughTimePassed) {
-        const timeoutId = setTimeout(() => {
-          syncToDatabase().then(() => {
-            setLastSyncTime(Date.now());
-            setLastSyncedData(currentData);
-          });
-        }, 2000); // 2 second debounce
-
-        return () => clearTimeout(timeoutId);
-      }
-    }
-  }, [user?.username, points, level, streak, totalStudyTime, lastSyncTime, lastSyncedData, isInitialLoad]); // Removed syncToDatabase from dependencies
-
-  // Mark initial load as complete after first render
-  useEffect(() => {
-    if (isInitialLoad && user) {
-      const timer = setTimeout(() => {
-        setIsInitialLoad(false);
-      }, 3000); // Wait 3 seconds before enabling auto-sync
-
-      return () => clearTimeout(timer);
-    }
-  }, [isInitialLoad, user]);
-
-  // Single useEffect for both initial fetch and periodic sync
-  useEffect(() => {
-    if (!user) return;
-
-    // Initial fetch - only once per user session
-    let hasInitialFetch = false;
-
-    const performInitialFetch = async () => {
-      if (!hasInitialFetch && user.progress) {
-        hasInitialFetch = true;
-        await fetchLatestProgress();
-      }
-    };
-
-    // Perform initial fetch immediately
-    performInitialFetch();
-
-    // Set up periodic sync (every 10 minutes)
-    const interval = setInterval(() => {
-      fetchLatestProgress();
-    }, 600000); // 10 minutes
-
-    return () => {
-      clearInterval(interval);
-      hasInitialFetch = false;
-    };
-  }, [user?._id]); // Only depend on user ID, not the entire user object or fetchLatestProgress
-
-  // Level calculation based on points - CORRECTED SYSTEM
-  // Level 1: 100 points, Level 2: 150 points, Level 3: 200 points (+50 for each level)
-  const calculateLevelFromPoints = useCallback((totalPoints: number) => {
-    if (totalPoints < 100) return 1;
-
-    let currentLevel = 1;
-    let pointsUsed = 0;
-    let pointsForNextLevel = 100; // Points needed for level 2
-
-    while (pointsUsed + pointsForNextLevel <= totalPoints) {
-      pointsUsed += pointsForNextLevel;
-      currentLevel++;
-      pointsForNextLevel = 100 + (currentLevel - 1) * 50; // Level 2=150, Level 3=200, etc.
-    }
-
-    return currentLevel;
-  }, []);
-
-  // Calculate points needed for next level
-  const calculatePointsForNextLevel = useCallback((currentLevel: number, currentPoints: number) => {
-    let pointsUsed = 0;
-
-    // Calculate total points used for all previous levels
-    for (let level = 1; level < currentLevel; level++) {
-      if (level === 1) {
-        pointsUsed += 100;
-      } else {
-        pointsUsed += 100 + (level - 1) * 50;
-      }
-    }
-
-    // Points needed for next level
-    const pointsForNextLevel = 100 + (currentLevel - 1) * 50;
-    const pointsInCurrentLevel = currentPoints - pointsUsed;
-
-    return pointsForNextLevel - pointsInCurrentLevel;
-  }, []);
-
-  // Define earnBadge first to avoid dependency issues
-  const earnBadge = useCallback((badgeId: string) => {
-    setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
-      badge.id === badgeId && !badge.earned
-        ? { ...badge, earned: true, earnedAt: new Date() }
-        : badge
-    ));
-  }, []);
-
-  // Level up system - ROBUST protection against infinite loops
-  const [isLevelingUp, setIsLevelingUp] = useState(false);
-  const [lastProcessedLevel, setLastProcessedLevel] = useState(1);
-  const levelUpTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    // Multiple guards to prevent infinite loops
-    if (isLevelingUp) return; // Guard 1: Already processing
-    if (points < 100) return; // Guard 2: Not enough points to level up
-
-    const newLevel = calculateLevelFromPoints(points);
-    
-    // Guard 3: Only process if level actually changed AND we haven't processed this level yet
-    if (newLevel > level && newLevel > lastProcessedLevel) {
-      setIsLevelingUp(true);
-      const levelsGained = newLevel - level;
-      
-      // Clear any pending timeout
-      if (levelUpTimeoutRef.current) {
-        clearTimeout(levelUpTimeoutRef.current);
-      }
-      
-      // Update level immediately
-      setLevel(newLevel);
-      setLastProcessedLevel(newLevel);
-
-      // Award level up badge immediately (doesn't affect points)
-      if (newLevel >= 5) {
-        setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
-          badge.id === 'scholar' && !badge.earned
-            ? { ...badge, earned: true, earnedAt: new Date() }
-            : badge
-        ));
-      }
-
-      // Add level bonus AFTER a delay to prevent infinite loop
-      levelUpTimeoutRef.current = setTimeout(() => {
-        const levelBonus = levelsGained * 100; // 100 points per level gained
-        let totalBonus = levelBonus;
-
-        // Level milestone bonuses
-        if (newLevel === 5) {
-          totalBonus += 200; // +200 bonus at level 5
-        }
-        if (newLevel === 10) {
-          totalBonus += 500; // +500 bonus at level 10
-        }
-
-        // Add all bonuses at once to minimize state updates
-        setPoints((prev: number) => prev + totalBonus);
-        setIsLevelingUp(false);
-        levelUpTimeoutRef.current = null;
-      }, 150); // Slightly longer delay for safety
-    }
-    
-    // Cleanup timeout on unmount
-    return () => {
-      if (levelUpTimeoutRef.current) {
-        clearTimeout(levelUpTimeoutRef.current);
-      }
-    };
-  }, [points, level, lastProcessedLevel, isLevelingUp]); // Removed function dependencies
-
-  // Check for point-based badges - with tracking to prevent duplicate awards
-  const [badgesChecked, setBadgesChecked] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (points >= 100 && !badgesChecked.has('points-100')) {
-      earnBadge('points-100');
-      setBadgesChecked(prev => new Set(prev).add('points-100'));
-    }
-  }, [points, badgesChecked]);
-
-  // Check for streak badges
-  useEffect(() => {
-    if (streak >= 7 && !badgesChecked.has('streak-7')) {
-      earnBadge('streak-7');
-      setBadgesChecked(prev => new Set(prev).add('streak-7'));
-    }
-  }, [streak, badgesChecked]);
-
-  // Power-up timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPowerUps((prev: PowerUp[]) => prev.map((powerUp: PowerUp) => {
-        if (powerUp.active && powerUp.endTime) {
-          const now = new Date();
-          if (now >= powerUp.endTime) {
-            return { ...powerUp, active: false, endTime: undefined };
-          }
-        }
-        return powerUp;
-      }));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Actions - Updated according to new point system
-  const addPoints = useCallback((amount: number) => {
-    // Check for active 2x power-up
-    const doublePointsActive = powerUps.some((p: PowerUp) => p.id === 'double-points' && p.active);
-    const actualAmount = doublePointsActive ? amount * 2 : amount;
-    setPoints((prev: number) => Math.max(0, prev + actualAmount)); // Prevent negative points
-  }, [powerUps]);
-
-  // Enhanced study session points with bonuses
-  const addStudySessionPoints = useCallback((minutes: number, completedSuccessfully: boolean, has2xPowerUp: boolean = false, quizScore?: number) => {
-    if (completedSuccessfully) {
-      // Base points: time in minutes * 5 points
-      let pointsEarned = minutes * 5;
-
-      // Perfect session bonus (>80% quiz score)
-      if (quizScore && quizScore >= 80) {
-        pointsEarned += 25; // +25 bonus for perfect session
-      }
-
-      // Long session bonus (>60 minutes)
-      if (minutes > 60) {
-        const extraMinutes = minutes - 60;
-        const bonusSessions = Math.floor(extraMinutes / 30); // Every 30 minutes
-        pointsEarned += bonusSessions * 10; // +10 bonus per additional 30 min
-      }
-
-      // Apply 2x powerup multiplier to total points (including bonuses)
-      if (has2xPowerUp) {
-        pointsEarned = pointsEarned * 2;
-      }
-
-      // Add points directly to avoid dependency
-      setPoints((prev: number) => Math.max(0, prev + pointsEarned));
-      return pointsEarned;
-    } else {
-      // If session ended before then -25 points
-      setPoints((prev: number) => Math.max(0, prev - 25));
-      return -25;
-    }
-  }, []); // No dependencies needed
-
-
-
-  // Enhanced quiz points system with bonuses
-  const addQuizPoints = useCallback((correctAnswers: number, wrongAnswers: number, answersRevealed: number, totalQuestions: number, timeSpent?: number) => {
-    // eslint-disable-next-line no-console
-    console.log('🎮 addQuizPoints called:', { correctAnswers, wrongAnswers, answersRevealed, totalQuestions, timeSpent });
-    
-    // Base points calculation
-    const correctPoints = correctAnswers * 5; // +5 per correct answer
-    const wrongPoints = wrongAnswers * -1; // -1 per wrong answer  
-    const revealedPoints = answersRevealed * -10; // -10 per answer revealed
-
-    let bonusPoints = 0;
-
-    // Perfect score bonus (100%): +50 bonus
-    if (correctAnswers === totalQuestions && totalQuestions > 0) {
-      bonusPoints += 50;
-      // Award perfect score badge
-      setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
-        badge.id === 'perfect-score' && !badge.earned
-          ? { ...badge, earned: true, earnedAt: new Date() }
-          : badge
-      ));
-    }
-
-    // Speed bonus: +1 point per question if completed in <30 seconds
-    if (timeSpent && timeSpent < 30 && totalQuestions > 0) {
-      bonusPoints += totalQuestions; // +1 per question for speed
-    }
-
-    const totalPoints = correctPoints + wrongPoints + revealedPoints + bonusPoints;
-
-    // Check for 2x powerup - inline to avoid dependency
-    const doublePointsActive = powerUps.some((p: PowerUp) => p.id === 'double-points' && p.active);
-    const finalPoints = doublePointsActive ? totalPoints * 2 : totalPoints;
-
-    // Add points directly to avoid addPoints dependency
-    setPoints((prev: number) => {
-      const newTotal = Math.max(0, prev + finalPoints);
-      // eslint-disable-next-line no-console
-      console.log('💰 Points updated:', { previous: prev, added: finalPoints, newTotal });
-      return newTotal;
-    });
-
-    // Check quiz-related achievements
-    const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
-    if (accuracy >= 90) {
-      // Award quiz expert badge directly
-      setBadges((prev: Badge[]) => prev.map((badge: Badge) =>
-        badge.id === 'quiz-expert' && !badge.earned
-          ? { ...badge, earned: true, earnedAt: new Date() }
-          : badge
-      ));
-    }
-
-    // eslint-disable-next-line no-console
-    console.log('✅ addQuizPoints completed, returning:', finalPoints);
-    return finalPoints;
-  }, [powerUps]); // Minimized dependencies - only powerUps needed for 2x check
-
-  const activatePowerUp = useCallback((powerUpId: string) => {
-    setPowerUps((prev: PowerUp[]) => prev.map((powerUp: PowerUp) => {
-      if (powerUp.id === powerUpId) {
-        if (powerUp.duration > 0) {
-          const endTime = new Date();
-          endTime.setSeconds(endTime.getSeconds() + powerUp.duration);
-          return { ...powerUp, active: true, endTime };
-        } else {
-          // Instant power-up (like time extension)
-          return { ...powerUp, active: false };
-        }
-      }
-      return powerUp;
-    }));
-  }, []);
-
-  // Enhanced power-up system with stacking limits and cooldowns
-  const [powerUpCooldowns, setPowerUpCooldowns] = useState<{ [key: string]: Date }>({});
-
-  const buyPowerUp = useCallback((powerUpId: string) => {
-    const powerUpCost = 100; // Cost: 100 points
-
-    // Check if user has enough points
-    if (points < powerUpCost) {
+      // Refresh stats to get updated coin count
+      await refreshStats();
+      return true;
+    } catch (err) {
+      console.error('Failed to consume coin:', err);
+      setError(err instanceof Error ? err.message : 'Failed to consume coin');
       return false;
     }
+  }, [apiCall, refreshStats]);
 
-    // Check for active powerups (max 1 at a time)
-    const activePowerUp = powerUps.find((p: PowerUp) => p.active);
-    if (activePowerUp) {
-      return false; // Already have an active powerup
+  // Utility functions
+  const calculateLevelProgress = useCallback(() => {
+    if (!stats) return { current: 0, needed: 100, percentage: 0 };
+    
+    const needed = calculatePointsForNextLevel(stats.level, stats.points);
+    const pointsForCurrentLevel = 100 + (stats.level - 1) * 50;
+    const current = pointsForCurrentLevel - needed;
+    const percentage = (current / pointsForCurrentLevel) * 100;
+    
+    return { current, needed, percentage };
+  }, [stats]);
+
+  const hasActivePowerUp = useCallback((effect: string) => {
+    if (!stats) return false;
+    return stats.activePowerUps.some(
+      powerUp => powerUp.effect === effect && powerUp.expiresAt > new Date()
+    );
+  }, [stats]);
+
+  const getStreakCalendar = useCallback(() => {
+    if (!stats) return [];
+    
+    const calendar: { date: string; hasStudy: boolean }[] = [];
+    const today = new Date();
+    
+    // Generate last 30 days
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dateString = date.toISOString().split('T')[0];
+      
+      calendar.push({
+        date: dateString,
+        hasStudy: stats.streak.streakDates.includes(dateString)
+      });
     }
+    
+    return calendar;
+  }, [stats]);
 
-    // Check cooldown (1 hour between purchases)
-    const lastPurchase = powerUpCooldowns[powerUpId];
-    if (lastPurchase) {
-      const hourAgo = new Date();
-      hourAgo.setHours(hourAgo.getHours() - 1);
-      if (lastPurchase > hourAgo) {
-        return false; // Still in cooldown
-      }
-    }
+  // Computed values
+  const activePowerUps = stats?.activePowerUps.filter(
+    powerUp => powerUp.expiresAt > new Date()
+  ) || [];
 
-    // Purchase successful
-    setPoints((prev: number) => prev - powerUpCost);
-    activatePowerUp(powerUpId);
-
-    // Set cooldown
-    setPowerUpCooldowns(prev => ({
-      ...prev,
-      [powerUpId]: new Date()
-    }));
-
-    return true;
-  }, [points, powerUps, powerUpCooldowns, activatePowerUp]);
-
-  // Enhanced streak system with bonuses and protection
-  const incrementStreak = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const lastStudyDate = typeof window !== 'undefined' ? localStorage.getItem('lastStudyDate') : null;
-
-    if (lastStudyDate !== today) {
-      // Check if it's consecutive days
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-      if (lastStudyDate === yesterdayStr) {
-        // Consecutive day - increment streak
-        const newStreak = streak + 1;
-        setStreak(newStreak);
-
-        // Streak bonuses
-        if (newStreak === 7) {
-          addPoints(50); // 7 days: +50pts
-          earnBadge('streak-7');
-        } else if (newStreak === 30) {
-          addPoints(200); // 30 days: +200pts
-        } else if (newStreak === 100) {
-          addPoints(500); // 100 days: +500pts
-        }
-      } else if (lastStudyDate !== today) {
-        // Check for streak protection (1 "freeze" day per week)
-        const streakProtectionUsed = typeof window !== 'undefined' ?
-          localStorage.getItem('streakProtectionUsed') : null;
-        const lastProtectionDate = streakProtectionUsed ? new Date(streakProtectionUsed) : null;
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-
-        if (!lastProtectionDate || lastProtectionDate < weekAgo) {
-          // Can use streak protection
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('streakProtectionUsed', today);
-          }
-          // Keep current streak (protection used)
-        } else {
-          // No protection available - reset streak to 1
-          setStreak(1);
-        }
-      }
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lastStudyDate', today);
-      }
-    }
-    // If already studied today, don't change streak
-  }, [streak, addPoints, earnBadge]);
-
-  const resetStreak = useCallback(() => {
-    setStreak(0);
-  }, []);
-
-  const completeQuest = useCallback((questId: string) => {
-    setQuests((prev: Quest[]) => prev.map((quest: Quest) =>
-      quest.id === questId && !quest.completed
-        ? { ...quest, completed: true, completedAt: new Date(), progress: quest.target }
-        : quest
-    ));
-
-    // Award points for completing quest
-    const quest = quests.find((q: Quest) => q.id === questId);
-    if (quest) {
-      addPoints(quest.reward);
-    }
-  }, [quests, addPoints]);
-
-  const completeChallenge = useCallback((challengeId: string) => {
-    setChallenges((prev: Challenge[]) => prev.map((challenge: Challenge) =>
-      challenge.id === challengeId && !challenge.completed
-        ? { ...challenge, completed: true, completedAt: new Date() }
-        : challenge
-    ));
-
-    // Award points for completing challenge
-    // Find the challenge in the previous state to get its reward value
-    const challengeReward = challenges.find((c: Challenge) => c.id === challengeId)?.reward || 0;
-    if (challengeReward > 0) {
-      addPoints(challengeReward);
-    }
-  }, [challenges, addPoints]);
-
-  const updateDailyProgress = useCallback((amount: number) => {
-    setDailyProgress((prev: number) => {
-      const newProgress = prev + amount;
-      return newProgress > dailyGoal ? dailyGoal : newProgress;
-    });
-  }, [dailyGoal]);
-
-  const unlockAchievement = useCallback((achievementId: string) => {
-    setAchievements((prev: Achievement[]) => prev.map((achievement: Achievement) =>
-      achievement.id === achievementId && !achievement.earned
-        ? { ...achievement, earned: true, earnedAt: new Date() }
-        : achievement
-    ));
-
-    // Award points for unlocking achievement
-    const achievement = achievements.find((a: Achievement) => a.id === achievementId);
-    if (achievement) {
-      addPoints(achievement.points);
-    }
-  }, [achievements, addPoints]);
-
-  const addStudyTime = useCallback((minutes: number) => {
-    setTotalStudyTime((prev: number) => prev + minutes);
-    updateDailyProgress(minutes);
-
-    // Check for study time achievements
-    if (totalStudyTime + minutes >= 120) {
-      unlockAchievement('marathon-study');
-    }
-  }, [totalStudyTime, updateDailyProgress, unlockAchievement]);
-
-  // Enhanced coins system with bonus rewards
-  const useCoin = useCallback(() => {
-    if (coins >= 3) {
-      return false; // Max 3 answer reveals per quiz
-    }
-    setCoins((prev: number) => prev + 1);
-    return true;
-  }, [coins]);
-
-  const resetCoins = useCallback(() => {
-    setCoins(0); // Auto-reset coins for new quiz
-  }, []);
-
-  // Bonus coin system - perfect quiz score gives 1 bonus coin for next quiz
-  const awardBonusCoin = useCallback(() => {
-    // This will be called when user gets perfect score
-    // The bonus coin is conceptual - next quiz starts with -1 coin usage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bonusCoinAvailable', 'true');
-    }
-  }, []);
-
-  const hasBonusCoin = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('bonusCoinAvailable') === 'true';
-    }
-    return false;
-  }, []);
-
-  const useBonusCoin = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('bonusCoinAvailable');
-    }
-  }, []);
-
-  const checkQuestProgress = useCallback((questId: string, progress: number) => {
-    setQuests((prev: Quest[]) => prev.map((quest: Quest) => {
-      if (quest.id === questId && !quest.completed) {
-        const newProgress = Math.min(quest.progress + progress, quest.target);
-        const completed = newProgress >= quest.target;
-
-        if (completed) {
-          completeQuest(questId);
-        }
-
-        return { ...quest, progress: newProgress, completed };
-      }
-      return quest;
-    }));
-  }, [completeQuest]);
-
-  const value = {
-    points,
-    level,
-    streak,
-    coins,
-    badges,
-    powerUps,
-    quests,
-    challenges,
-    achievements,
-    dailyGoal,
-    dailyProgress,
-    totalStudyTime,
-    addPoints,
-    addStudySessionPoints,
-    addQuizPoints,
-
-    buyPowerUp,
-    incrementStreak,
-    resetStreak,
-    earnBadge,
-    activatePowerUp,
-    completeQuest,
-    completeChallenge,
-    updateDailyProgress,
-    checkQuestProgress,
-    addStudyTime,
-    unlockAchievement,
-    calculateLevelFromPoints,
-    calculatePointsForNextLevel,
-    useCoin,
-    resetCoins,
-    awardBonusCoin,
-    hasBonusCoin,
-    useBonusCoin,
-    syncToDatabase,
-    fetchLatestProgress,
+  const contextValue: GamificationContextType = {
+    // Core stats
+    stats,
+    isLoading,
+    error,
+    
+    // Computed values
+    availablePowerUps: AVAILABLE_POWER_UPS,
+    activePowerUps,
+    recentAchievements,
+    activeQuests,
+    
+    // Actions
+    processStudySession,
+    processQuizCompletion,
+    purchasePowerUp,
+    consumeCoin,
+    refreshStats,
+    
+    // Utility functions
+    calculateLevelProgress,
+    hasActivePowerUp,
+    getStreakCalendar,
   };
 
   return (
-    <GamificationContext.Provider value={value}>
+    <GamificationContext.Provider value={contextValue}>
       {children}
     </GamificationContext.Provider>
   );
@@ -937,3 +325,12 @@ export function useGamification() {
   }
   return context;
 }
+
+// Legacy compatibility exports (for existing components)
+export type { Badge, Quest, Achievement, Challenge, StudySession, ActivePowerUp };
+
+// Legacy function exports for backward compatibility
+export const legacyCompatibility = {
+  calculateLevelFromPoints,
+  calculatePointsForNextLevel,
+};

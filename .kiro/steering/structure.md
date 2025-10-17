@@ -1,4 +1,7 @@
-# Project Structure & Architecture
+# Production-Ready Project Structure & Architecture
+
+## 🚀 LIVE PRODUCTION ARCHITECTURE
+**⚠️ This structure is actively serving real users. All changes must maintain production stability.**
 
 ## Directory Organization
 
@@ -62,14 +65,19 @@ gamified-learning-platform/
 - **Relative Imports**: Avoid deep relative paths, prefer aliases
 - **Component Imports**: Import from `@/components/ui` for base components
 
-## Code Organization Rules
+## Production Code Organization Rules
 - **Single Responsibility**: Each file should have one primary purpose
 - **Feature Grouping**: Group related functionality by domain
 - **Separation of Concerns**: Keep UI, business logic, and data separate
 - **Reusability**: Extract common patterns into hooks and utilities
+- **Error Boundaries**: Every component must handle errors gracefully
+- **Performance**: All components optimized for production load
+- **Security**: Input validation and sanitization at every layer
 
-## Environment Configuration
-- **Development**: `.env.local` for local development
-- **Production**: Environment variables for deployment
-- **Database**: MongoDB Atlas connection string
-- **AI**: Google Gemini API key configuration
+## Production Environment Configuration
+- **Security First**: ALL secrets via environment variables, NEVER hardcoded
+- **Database**: MongoDB Atlas M0 tier with connection optimization
+- **Authentication**: Secure JWT implementation with proper validation
+- **API Keys**: Google Gemini API with rate limiting and error handling
+- **Monitoring**: Error tracking, performance monitoring, user analytics
+- **Deployment**: Vercel with proper build optimization and caching

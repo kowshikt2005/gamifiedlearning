@@ -5,20 +5,23 @@ import { useRouter, useParams } from 'next/navigation';
 import { useStudySession } from '@/contexts/study-session-context';
 import { useGamification } from '@/contexts/gamification-context';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ArrowRight, TrendingUp, Target, Star, Clock, CheckCircle, Trophy, Zap, Flame } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, ArrowRight, TrendingUp, Target, Clock, CheckCircle, Trophy, Award, BookOpen } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { analyzeQuizPerformance, type AnalyzeQuizPerformanceOutput } from '@/ai/flows/analyze-quiz-performance';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 
 export default function FeedbackPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, quizQuestions, quizAnswers, coinsUsed, studyDuration, penaltyPoints, resetSession, addCompletedSession } = useStudySession();
-    const { points, level, streak, addQuizPoints, completeChallenge, awardBonusCoin } = useGamification();
+    const gamification = useGamification();
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
+    const [finalPoints, setFinalPoints] = useState(0);
+    const [isProcessingComplete, setIsProcessingComplete] = useState(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -37,7 +40,6 @@ export default function FeedbackPage() {
                     setAnalysis(result);
                 } catch (error) {
                     console.error("Failed to analyze performance:", error);
-                    // Set fallback data so the page is still useful
                     setAnalysis({
                         strengths: ["Could not analyze strengths. Please review your answers manually."],
                         weaknesses: ["Could not analyze weaknesses. Please review your answers manually."]
@@ -61,65 +63,49 @@ export default function FeedbackPage() {
         }, 0);
     }, [quizQuestions, quizAnswers]);
     
-    // ENHANCED SCORING SYSTEM with new gamification rules
     const correctAnswers = score;
     const wrongAnswers = quizQuestions ? quizQuestions.length - score : 0;
     const totalQuestions = quizQuestions ? quizQuestions.length : 0;
-    
-    const [finalPoints, setFinalPoints] = useState(0);
-    const [isProcessingComplete, setIsProcessingComplete] = useState(false);
+    const scorePercentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
 
     // Single useEffect to handle all processing - runs only once when data is ready
     useEffect(() => {
-        // Prevent multiple executions
         if (isProcessingComplete) return;
         if (!isClient) return;
         if (!quizQuestions || quizQuestions.length === 0) return;
         if (quizAnswers.length === 0) return;
         if (!taskInfo || !params.id) return;
         
-        // Mark as processing to prevent re-runs
         setIsProcessingComplete(true);
         
-        console.log('🎯 Processing quiz completion (one-time):', {
-            taskId: params.id,
-            correctAnswers,
-            wrongAnswers,
-            coinsUsed,
-            totalQuestions,
-            studyDuration
-        });
+        const processQuizCompletion = async () => {
+            try {
+                const result = await gamification.processQuizCompletion({
+                    correctAnswers,
+                    wrongAnswers,
+                    answersRevealed: coinsUsed,
+                    totalQuestions,
+                    timeSpent: studyDuration
+                });
+                
+                const totalPoints = result?.pointsEarned || 0;
+                setFinalPoints(totalPoints);
+                
+                addCompletedSession({
+                    id: params.id as string,
+                    taskName: taskInfo.name,
+                    points: totalPoints
+                });
+                
+                return totalPoints;
+            } catch (error) {
+                console.error('Failed to process quiz completion:', error);
+                setFinalPoints(0);
+                return 0;
+            }
+        };
         
-        // Calculate points
-        const quizPoints = addQuizPoints(
-            correctAnswers, 
-            wrongAnswers, 
-            coinsUsed, 
-            totalQuestions, 
-            studyDuration
-        );
-        
-        const totalPoints = quizPoints - penaltyPoints;
-        setFinalPoints(totalPoints);
-        
-        // Save session (only once)
-        addCompletedSession({
-            id: params.id as string,
-            taskName: taskInfo.name,
-            points: totalPoints
-        });
-        
-        // Award achievements
-        if (correctAnswers === totalQuestions && totalQuestions > 0) {
-            awardBonusCoin();
-            completeChallenge('perfect-score');
-        }
-        
-        if (studyDuration < 300) {
-            completeChallenge('speed-demon');
-        }
-        
-        console.log('✅ Quiz processing complete');
+        processQuizCompletion();
         
     }, [
         isProcessingComplete, 
@@ -129,9 +115,6 @@ export default function FeedbackPage() {
         taskInfo?.name, 
         params.id
     ]);
-
-    // Save session immediately after points are calculated (in the points calculation useEffect)
-    // No separate useEffect needed to prevent infinite loops
 
     const formatDuration = useCallback((seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -147,152 +130,209 @@ export default function FeedbackPage() {
 
     if (!isClient || !quizQuestions) {
         return (
-            <div className="flex flex-col h-[80vh] items-center justify-center gap-4">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-muted-foreground animate-pulse">Calculating your results...</p>
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+                    <p className="text-muted-foreground animate-pulse">Analyzing your performance...</p>
+                </div>
             </div>
         );
     }
     
     return (
-        <div className="container mx-auto max-w-4xl py-8">
-            {/* Gamification Header */}
-            <div className="flex flex-wrap justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl animate-gradientShift gap-4">
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2 bg-white dark:bg-black/20 px-4 py-2 rounded-full shadow-md">
-                        <Trophy className="h-5 w-5 text-primary" />
-                        <span className="font-bold">Quiz Results</span>
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+            <div className="container mx-auto px-4 py-8 max-w-6xl">
+                
+                {/* Hero Section */}
+                <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mb-4">
+                        <Trophy className="h-10 w-10 text-white" />
                     </div>
-                    <div className="flex items-center gap-2 bg-yellow-100 dark:bg-yellow-900/30 px-4 py-2 rounded-full">
-                        <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-                        <span className="font-bold">{points} Total Points</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-full">
-                        <Flame className="h-5 w-5 text-red-500" />
-                        <span className="font-bold">{streak} Day Streak</span>
-                    </div>
+                    <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+                        Quiz Complete!
+                    </h1>
+                    <p className="text-xl text-gray-600 dark:text-gray-300">
+                        Great work on &quot;{taskInfo?.name || 'your study session'}&quot;
+                    </p>
                 </div>
-                <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-4 py-2 rounded-full">
-                    <Zap className="h-5 w-5 text-blue-500" />
-                    <span className="font-bold">Level {level}</span>
-                </div>
-            </div>
-            
-            <Card className="shadow-lg gamify-card">
-                <CardHeader className="text-center">
-                    <CardTitle className="text-3xl font-headline">Session Complete!</CardTitle>
-                    <CardDescription>Here&apos;s a summary of your study session for &apos;{taskInfo?.name || 'your task'}&apos;</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
-                        <Card className="gamify-card">
-                            <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Clock className="h-4 w-4"/>Study Time</CardTitle></CardHeader>
-                            <CardContent><p className="text-2xl font-bold">{formatDuration(studyDuration)}</p></CardContent>
-                        </Card>
-                         <Card className="gamify-card">
-                            <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><CheckCircle className="h-4 w-4"/>Quiz Score</CardTitle></CardHeader>
-                            <CardContent>
-                                <p className="text-2xl font-bold">{score} / {quizQuestions.length}</p>
-                                <p className="text-sm text-muted-foreground">{Math.round((score / quizQuestions.length) * 100)}%</p>
-                            </CardContent>
-                        </Card>
-                        <Card className="gamify-card">
-                            <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Zap className="h-4 w-4"/>XP Gained</CardTitle></CardHeader>
-                            <CardContent><p className="text-2xl font-bold text-blue-600">{Math.floor(finalPoints * 1.5)}</p></CardContent>
-                        </Card>
-                         <Card className="gamify-card">
-                            <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Star className="h-4 w-4"/>Points Earned</CardTitle></CardHeader>
-                            <CardContent><p className="text-2xl font-bold text-accent">{finalPoints > 0 ? `+${finalPoints}`: finalPoints}</p></CardContent>
-                        </Card>
-                    </div>
 
+                {/* Score Overview Card */}
+                <Card className="mb-8 border-0 shadow-xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                    <CardContent className="p-8">
+                        <div className="text-center mb-6">
+                            <div className="text-6xl font-bold text-gray-900 dark:text-white mb-2">
+                                {scorePercentage}%
+                            </div>
+                            <div className="text-lg text-gray-600 dark:text-gray-300">
+                                {score} out of {totalQuestions} correct
+                            </div>
+                            <Progress value={scorePercentage} className="w-full max-w-md mx-auto mt-4 h-3" />
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                                <Clock className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {formatDuration(studyDuration)}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">Study Time</div>
+                            </div>
+                            
+                            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {correctAnswers}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">Correct Answers</div>
+                            </div>
+                            
+                            <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
+                                <Award className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {Math.floor(finalPoints * 1.5)}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">XP Gained</div>
+                            </div>
+                            
+                            <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
+                                <Trophy className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {finalPoints > 0 ? `+${finalPoints}` : finalPoints}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">Points Earned</div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    
                     {/* Points Breakdown */}
-                    <Card className="gamify-card">
+                    <Card className="border-0 shadow-xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Trophy className="h-5 w-5 text-yellow-500" />
+                            <CardTitle className="flex items-center gap-2 text-xl">
+                                <Trophy className="h-6 w-6 text-yellow-500" />
                                 Points Breakdown
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span>Correct Answers ({correctAnswers} × 5 points)</span>
+                        <CardContent className="space-y-4">
+                            <div className="flex justify-between items-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                <span className="font-medium">Correct Answers ({correctAnswers} × 5)</span>
                                 <span className="font-bold text-green-600">+{correctAnswers * 5}</span>
                             </div>
+                            
                             {wrongAnswers > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span>Wrong Answers ({wrongAnswers} × -1 point)</span>
+                                <div className="flex justify-between items-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                                    <span className="font-medium">Wrong Answers ({wrongAnswers} × -1)</span>
                                     <span className="font-bold text-red-600">-{wrongAnswers}</span>
                                 </div>
                             )}
+                            
                             {coinsUsed > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span>Answer Reveals ({coinsUsed} × -10 points)</span>
-                                    <span className="font-bold text-red-600">-{coinsUsed * 10}</span>
+                                <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                                    <span className="font-medium">Answer Reveals ({coinsUsed} × -10)</span>
+                                    <span className="font-bold text-orange-600">-{coinsUsed * 10}</span>
                                 </div>
                             )}
+                            
                             {correctAnswers === totalQuestions && totalQuestions > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span>Perfect Score Bonus! 🎉</span>
+                                <div className="flex justify-between items-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                                    <span className="font-medium">Perfect Score Bonus! 🎉</span>
                                     <span className="font-bold text-purple-600">+50</span>
                                 </div>
                             )}
+                            
                             {penaltyPoints > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span>Early Finish Penalty</span>
-                                    <span className="font-bold text-red-600">-{penaltyPoints}</span>
+                                <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/20 rounded-lg">
+                                    <span className="font-medium">Early Finish Penalty</span>
+                                    <span className="font-bold text-gray-600">-{penaltyPoints}</span>
                                 </div>
                             )}
+                            
                             <Separator />
-                            <div className="flex justify-between items-center text-lg font-bold">
-                                <span>Total Points</span>
-                                <span className={finalPoints > 0 ? "text-green-600" : "text-red-600"}>
+                            
+                            <div className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg">
+                                <span className="text-lg font-bold">Total Points</span>
+                                <span className={`text-xl font-bold ${finalPoints > 0 ? "text-green-600" : "text-red-600"}`}>
                                     {finalPoints > 0 ? `+${finalPoints}` : finalPoints}
                                 </span>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Separator />
+                    {/* Performance Analysis */}
+                    <Card className="border-0 shadow-xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-xl">
+                                <BookOpen className="h-6 w-6 text-blue-500" />
+                                Performance Analysis
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            
+                            {/* Strengths */}
+                            <div>
+                                <h3 className="text-lg font-semibold flex items-center gap-2 mb-3">
+                                    <TrendingUp className="h-5 w-5 text-green-500" />
+                                    Strengths
+                                </h3>
+                                {isAnalyzing ? (
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-4 w-full" />
+                                        <Skeleton className="h-4 w-3/4" />
+                                        <Skeleton className="h-4 w-5/6" />
+                                    </div>
+                                ) : (
+                                    <ul className="space-y-2">
+                                        {analysis?.strengths.map((item, index) => (
+                                            <li key={index} className="flex items-start gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                                                <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                            
+                            {/* Areas for Improvement */}
+                            <div>
+                                <h3 className="text-lg font-semibold flex items-center gap-2 mb-3">
+                                    <Target className="h-5 w-5 text-orange-500" />
+                                    Areas for Improvement
+                                </h3>
+                                {isAnalyzing ? (
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-4 w-full" />
+                                        <Skeleton className="h-4 w-4/5" />
+                                        <Skeleton className="h-4 w-3/4" />
+                                    </div>
+                                ) : (
+                                    <ul className="space-y-2">
+                                        {analysis?.weaknesses.map((item, index) => (
+                                            <li key={index} className="flex items-start gap-2 p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                                                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+                                                <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <h3 className="text-xl font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary"/>Strengths Identified</h3>
-                            {isAnalyzing ? (
-                                <div className="space-y-2">
-                                    <Skeleton className="h-4 w-4/5" />
-                                    <Skeleton className="h-4 w-3/5" />
-                                    <Skeleton className="h-4 w-4/5" />
-                                </div>
-                            ) : (
-                                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                                    {analysis?.strengths.map((item, index) => <li key={index}>{item}</li>)}
-                                </ul>
-                            )}
-                        </div>
-                         <div className="space-y-4">
-                            <h3 className="text-xl font-semibold flex items-center gap-2"><Target className="h-5 w-5 text-destructive"/>Areas for Improvement</h3>
-                             {isAnalyzing ? (
-                                <div className="space-y-2">
-                                    <Skeleton className="h-4 w-4/5" />
-                                    <Skeleton className="h-4 w-3/5" />
-                                    <Skeleton className="h-4 w-4/5" />
-                                </div>
-                            ) : (
-                                <ul className="list-disc list-inside space-y-2 text-muted-foreground">
-                                    {analysis?.weaknesses.map((item, index) => <li key={index}>{item}</li>)}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
-
-                     <div className="text-center pt-6">
-                        <Button onClick={handleDone} size="lg" className="gamify-button bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90">
-                           Back to Dashboard <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+                {/* Action Button */}
+                <div className="text-center">
+                    <Button 
+                        onClick={handleDone} 
+                        size="lg" 
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-semibold shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-200"
+                    >
+                        Back to Dashboard
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                </div>
+            </div>
         </div>
     );
 }

@@ -17,7 +17,7 @@ import {
 import { useState } from 'react';
 
 export function ChallengeCenter() {
-  const { challenges, completeChallenge } = useGamification();
+  const gamification = useGamification();
   const [startedChallenges, setStartedChallenges] = useState<Record<string, boolean>>({});
 
   // Get challenge difficulty color
@@ -47,7 +47,8 @@ export function ChallengeCenter() {
 
   // Complete a challenge (called when actual requirements are met)
   const handleCompleteChallenge = (challengeId: string) => {
-    completeChallenge(challengeId);
+    // Challenges are now handled automatically by the gamification service
+    // This is just for UI feedback
     setStartedChallenges(prev => {
       const newStarted = { ...prev };
       delete newStarted[challengeId];
@@ -64,7 +65,7 @@ export function ChallengeCenter() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Challenges</p>
-                <p className="text-2xl font-bold">{challenges.length}</p>
+                <p className="text-2xl font-bold">{gamification.stats?.challenges.length || 0}</p>
               </div>
               <Trophy className="h-8 w-8 text-yellow-500" />
             </div>
@@ -76,7 +77,7 @@ export function ChallengeCenter() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold">{challenges.filter(c => c.completed).length}</p>
+                <p className="text-2xl font-bold">{gamification.stats?.challenges.filter(c => c.completed).length || 0}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
@@ -89,7 +90,7 @@ export function ChallengeCenter() {
               <div>
                 <p className="text-sm text-muted-foreground">Points Earned</p>
                 <p className="text-2xl font-bold">
-                  {challenges.filter(c => c.completed).reduce((sum, c) => sum + c.reward, 0)}
+                  {gamification.stats?.challenges.filter(c => c.completed).reduce((sum, c) => sum + c.reward, 0) || 0}
                 </p>
               </div>
               <Star className="h-8 w-8 text-yellow-500 fill-yellow-500" />
@@ -108,7 +109,7 @@ export function ChallengeCenter() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {challenges.map(challenge => (
+            {(gamification.stats?.challenges || []).map(challenge => (
               <div 
                 key={challenge.id} 
                 className={`p-4 rounded-lg border-2 transition-all duration-300 ${

@@ -63,14 +63,56 @@ const nextConfig = {
       topLevelAwait: true,
     };
     
-    // Optimize for Vercel builds
+    // Suppress OpenTelemetry instrumentation warnings
+    const originalWarn = config.infrastructureLogging?.level !== 'error' ? console.warn : () => {};
+    
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      // Ignore OpenTelemetry warnings
+      (warning) => {
+        return warning.message && (
+          warning.message.includes('Critical dependency: the request of a dependency is an expression') ||
+          warning.message.includes('@opentelemetry/instrumentation') ||
+          warning.message.includes('node/instrumentation.js')
+        );
+      },
+    ];
+    
+    // Set infrastructure logging to suppress warnings
+    config.infrastructureLogging = {
+      level: 'error', // Only show errors, not warnings
+    };
+    
+    // Optimize for Vercel builds and handle MongoDB client-side encryption
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
         net: false,
         tls: false,
+        child_process: false,
+        crypto: false,
+        stream: false,
+        util: false,
+        url: false,
+        zlib: false,
+        http: false,
+        https: false,
+        assert: false,
+        os: false,
+        path: false,
       };
+      
+      // Exclude MongoDB server-side modules from client bundle
+      config.externals = config.externals || [];
+      config.externals.push({
+        'mongodb-client-encryption': 'commonjs mongodb-client-encryption',
+        'aws4': 'commonjs aws4',
+        'snappy': 'commonjs snappy',
+        'kerberos': 'commonjs kerberos',
+        '@mongodb-js/zstd': 'commonjs @mongodb-js/zstd',
+        'bson-ext': 'commonjs bson-ext',
+      });
     }
     
     // Optimize chunk splitting for better loading

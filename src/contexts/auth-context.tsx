@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { User } from '@/lib/models/user';
 
 interface AuthContextType {
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const getValidToken = () => {
+  const getValidToken = useCallback(() => {
     if (typeof window === 'undefined') return null;
     
     const token = localStorage.getItem('auth-token');
@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return token;
     }
     return null;
-  };
+  }, [user]);
 
   const value = {
     user,

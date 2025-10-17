@@ -22,7 +22,7 @@ export default function StudySessionPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, setTaskInfo, setStudyDuration, addPenalty } = useStudySession();
-    const { points, level, streak } = useGamification();
+    const gamification = useGamification();
     const { toast } = useToast();
     const [isClient, setIsClient] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -166,17 +166,17 @@ export default function StudySessionPage() {
                     </div>
                     <div className="flex items-center gap-2 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1.5 rounded-full">
                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                        <span className="font-bold text-sm">{points}</span>
+                        <span className="font-bold text-sm">{gamification.stats?.points || 0}</span>
                     </div>
                     <div className="flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-3 py-1.5 rounded-full">
                         <Flame className="h-4 w-4 text-red-500" />
-                        <span className="font-bold text-sm">{streak}</span>
+                        <span className="font-bold text-sm">{gamification.stats?.streak.currentStreak || 0}</span>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-1.5 rounded-full">
                         <Trophy className="h-4 w-4 text-blue-500" />
-                        <span className="font-bold text-sm">L{level}</span>
+                        <span className="font-bold text-sm">L{gamification.stats?.level || 1}</span>
                     </div>
                     <PowerUpActivator />
                     <Button

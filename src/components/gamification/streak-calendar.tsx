@@ -14,7 +14,10 @@ import {
 import { useState } from 'react';
 
 export function StreakCalendar() {
-  const { streak, dailyGoal, dailyProgress } = useGamification();
+  const gamification = useGamification();
+  const streak = gamification.stats?.streak.currentStreak || 0;
+  const dailyGoal = gamification.stats?.dailyGoal || 30;
+  const dailyProgress = gamification.stats?.dailyProgress || 0;
   const [currentDate] = useState(new Date());
 
   // Generate calendar days (last 30 days)

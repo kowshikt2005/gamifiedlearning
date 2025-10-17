@@ -62,7 +62,7 @@ export function useStudyData() {
     if (user) {
       fetchSessionData();
     }
-  }, [user]); // Depend on user object
+  }, [user, fetchSessionData]); // Include fetchSessionData dependency
 
   // Remove auto-refresh interval - rely on cache and manual refresh instead
 

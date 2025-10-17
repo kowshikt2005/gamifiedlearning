@@ -43,13 +43,13 @@ class SessionSaver {
 
     // Check if already processed
     if (this.processedSessions.has(sessionId)) {
-      console.log('⚠️ Session already saved:', sessionId);
+      // Session already saved
       return;
     }
 
     // Check if currently being processed
     if (this.pendingSessions.has(sessionId)) {
-      console.log('⚠️ Session save in progress, waiting:', sessionId);
+      // Session save in progress, waiting
       return this.pendingSessions.get(sessionId);
     }
 
@@ -62,7 +62,7 @@ class SessionSaver {
 
     try {
       await savePromise;
-      console.log('✅ Session saved successfully:', sessionId);
+      // Session saved successfully
     } catch (error) {
       console.error('❌ Session save failed:', sessionId, error);
       // Remove from processed set on failure so it can be retried
@@ -139,7 +139,7 @@ class SessionSaver {
 
     if (sessions.length === 0) return;
 
-    console.log(`📦 Processing batch of ${sessions.length} sessions`);
+    // Processing batch of sessions
 
     // Process sessions in parallel with concurrency limit
     const concurrency = 3;

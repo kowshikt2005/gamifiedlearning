@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export function ChallengeTracker() {
-  const { challenges, quests } = useGamification();
+  const gamification = useGamification();
   
 
 
@@ -25,7 +25,7 @@ export function ChallengeTracker() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {challenges.map(challenge => (
+            {(gamification.stats?.challenges || []).map(challenge => (
               <div 
                 key={challenge.id} 
                 className={`p-4 rounded-lg border-2 transition-all duration-300 ${
@@ -61,7 +61,7 @@ export function ChallengeTracker() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {quests.filter(q => !q.completed).map(quest => (
+            {(gamification.stats?.quests || []).filter(q => !q.completed).map(quest => (
               <div key={quest.id} className="p-4 rounded-lg border-2 border-muted hover:border-primary/50">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
@@ -77,7 +77,7 @@ export function ChallengeTracker() {
                 </div>
               </div>
             ))}
-            {quests.filter(q => !q.completed).length === 0 && (
+            {(gamification.stats?.quests || []).filter(q => !q.completed).length === 0 && (
               <p className="text-muted-foreground text-center py-4">No active quests. Complete challenges to unlock new ones!</p>
             )}
           </div>

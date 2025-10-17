@@ -3,11 +3,14 @@
 inclusion: always
 ---
 
-# StudyMaster AI - Code Quality & Standards
+# StudyMaster AI - Production-Ready Code Standards
+
+## 🚀 CRITICAL DEPLOYMENT STATUS
+**⚠️ THIS APPLICATION IS LIVE IN PRODUCTION - EVERY CHANGE AFFECTS REAL USERS**
 
 ## Critical Task Completion Protocol
 
-**MANDATORY**: Before marking ANY task complete, verify ALL items in the Final Checklist section.
+**MANDATORY**: Before marking ANY task complete, verify ALL items in the Final Checklist section AND the Production Deployment Checklist.
 
 ## API Endpoint Standards
 
@@ -117,40 +120,82 @@ function Component() {
 }
 ```
 
-## MANDATORY Final Checklist
+## MANDATORY Production Deployment Checklist
 
 **CRITICAL**: Before marking ANY task complete, verify ALL items:
 
+### Code Quality & Security
 - [ ] **Dead Code**: Removed unused imports, variables, functions, commented code
-- [ ] **Testing**: Traced logic for success, error, and edge cases  
+- [ ] **Console Logs**: No debugging logs remain (only console.error/warn allowed)
+- [ ] **TypeScript**: Proper typing, no `any` types, well-defined interfaces
+- [ ] **Input Validation**: All user inputs validated with Zod schemas
+- [ ] **Error Messages**: User-friendly, not technical jargon or stack traces
+- [ ] **Authentication**: Proper JWT validation for protected endpoints
+- [ ] **Environment Variables**: No hardcoded secrets or API keys
+
+### Production Performance
+- [ ] **Database Efficiency**: Optimized queries with proper indexing
+- [ ] **Connection Management**: Respects MongoDB Atlas M0 limits (max 10 connections)
+- [ ] **Error Handling**: Graceful degradation when services unavailable
+- [ ] **Timeout Handling**: All operations complete within 30 seconds
+- [ ] **Memory Management**: No memory leaks or excessive resource usage
+- [ ] **Rate Limiting**: API endpoints protected against abuse
+
+### User Experience
+- [ ] **Mobile Responsive**: Works on all device sizes and touch interfaces
+- [ ] **Loading States**: Proper loading indicators and user feedback
+- [ ] **Error States**: All error conditions handled gracefully
+- [ ] **Accessibility**: WCAG 2.1 AA compliance (aria-labels, keyboard navigation)
+- [ ] **Progressive Enhancement**: Core functionality works without JavaScript
+- [ ] **SEO Ready**: Proper meta tags and structured data
+
+### Integration & Testing
 - [ ] **API Conventions**: RESTful endpoints with proper HTTP verbs
-- [ ] **Error Messages**: User-friendly, not technical jargon
+- [ ] **Testing**: Traced logic for success, error, and edge cases
+- [ ] **Integration**: Verified compatibility with existing features
 - [ ] **Loose Ends**: Addressed or documented all TODO/FIXME comments
 - [ ] **Readability**: Code is immediately understandable to experienced developers
-- [ ] **Console Logs**: No debugging logs remain
-- [ ] **TypeScript**: Proper typing, no `any` types, well-defined interfaces
-- [ ] **Integration**: Verified compatibility with existing features
 - [ ] **Production Ready**: Secure, performant, complete error handling
 
-### Completion Response Format
+### Production Deployment Response Format
 
 ```
 Modified Files: [list all changed files]
 
-Quality Verification:
+🔒 Security & Quality Verification:
 ✅ Dead Code: [specific evidence]
-✅ Testing: [scenarios verified]  
-✅ API Conventions: [endpoint pattern confirmed]
-✅ Error Messages: [user-friendly examples]
+✅ Console Logs: [debugging removed, only error/warn remain]
+✅ TypeScript: [typing verification, no any types]
+✅ Input Validation: [Zod schemas implemented]
+✅ Authentication: [JWT validation confirmed]
+✅ Environment Variables: [no hardcoded secrets]
+
+⚡ Performance & Database:
+✅ Database Efficiency: [optimized queries confirmed]
+✅ Connection Management: [Atlas M0 limits respected]
+✅ Error Handling: [graceful degradation implemented]
+✅ Timeout Handling: [30-second limits enforced]
+✅ Memory Management: [no leaks detected]
+✅ Rate Limiting: [abuse protection confirmed]
+
+👥 User Experience:
+✅ Mobile Responsive: [tested on multiple devices]
+✅ Loading States: [proper feedback implemented]
+✅ Error States: [graceful error handling]
+✅ Accessibility: [WCAG 2.1 AA compliance]
+✅ Progressive Enhancement: [works without JS]
+✅ SEO Ready: [meta tags and structure verified]
+
+🔗 Integration & Standards:
+✅ API Conventions: [RESTful patterns confirmed]
+✅ Testing: [scenarios verified]
+✅ Integration: [compatibility confirmed]
 ✅ Loose Ends: [TODO status]
 ✅ Readability: [clarity confirmation]
-✅ Console Logs: [debugging removed]
-✅ TypeScript: [typing verification]
-✅ Integration: [compatibility confirmed]
-✅ Production Ready: [security/performance verified]
+✅ Production Ready: [deployment-ready verification]
 
-✅ Task Complete: All quality checks passed. Code is production-ready.
+🚀 PRODUCTION DEPLOYMENT READY: All checks passed. Code is live-ready.
 ```
 
-**If ANY item fails, continue working until ALL pass.**
+**If ANY item fails, continue working until ALL pass. This code will be seen by real users.**
 -------------------------------------------------------------------------------------> 

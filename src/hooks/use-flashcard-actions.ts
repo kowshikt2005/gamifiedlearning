@@ -171,18 +171,19 @@ export function useFlashcardActions({
 
       return true;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Save flashcards error:', error);
 
       let errorMessage = 'Failed to save flashcards. Please try again.';
       
       // Handle specific error types
-      if (error.message?.includes('Authentication')) {
+      const err = error as Error;
+      if (err.message?.includes('Authentication')) {
         errorMessage = 'Please log in again to continue.';
-      } else if (error.message?.includes('validation')) {
+      } else if (err.message?.includes('validation')) {
         errorMessage = 'Invalid flashcard data. Please try again.';
-      } else if (error.message) {
-        errorMessage = error.message;
+      } else if (err.message) {
+        errorMessage = err.message;
       }
 
       toast({

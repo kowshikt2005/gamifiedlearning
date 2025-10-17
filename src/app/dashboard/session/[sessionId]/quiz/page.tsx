@@ -3,13 +3,13 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStudySession } from '@/contexts/study-session-context';
-import { useGamification } from '@/contexts/gamification-context';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, ArrowLeft, ArrowRight, Lightbulb, Coins, Trophy, Star } from 'lucide-react';
+import { Loader2, ArrowLeft, ArrowRight, Lightbulb } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { generateQuizQuestions } from '@/ai/flows/generate-quiz-questions-from-pdf';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -20,12 +20,9 @@ export default function QuizSessionPage() {
     const params = useParams();
     const { toast } = useToast();
     const { taskInfo, setQuizQuestions: setContextQuizQuestions, quizQuestions, addQuizAnswer, getAnswerForQuestion, coinsUsed } = useStudySession();
-    const { points } = useGamification();
-
     const [isLoading, setIsLoading] = useState(true);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [revealedAnswers, setRevealedAnswers] = useState<number[]>([]);
-    const [score, setScore] = useState(0);
 
     useEffect(() => {
         if (!taskInfo?.dataUri) {
@@ -108,7 +105,7 @@ export default function QuizSessionPage() {
             title: "Answer Revealed! 💡",
             description: "The correct answer is now highlighted. (-10 points)",
         });
-    }, [currentQuestionIndex, toast]);
+    }, [currentQuestionIndex, toast, coinsUsed]);
 
     const isAnswerRevealed = useMemo(() => revealedAnswers.includes(currentQuestionIndex), [revealedAnswers, currentQuestionIndex]);
 
@@ -134,24 +131,6 @@ export default function QuizSessionPage() {
 
     return (
         <div className="container mx-auto max-w-2xl py-8">
-            {/* Gamification Header */}
-            <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1 rounded-full">
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                        <span className="font-bold text-sm">{points} Points</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full">
-                        <Trophy className="h-4 w-4 text-blue-500" />
-                        <span className="font-bold text-sm">Score: {score}/{quizQuestions.length}</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/30 px-3 py-1 rounded-full">
-                    <Coins className="h-4 w-4 text-purple-500" />
-                    <span className="font-bold text-sm">{coinsUsed} Hints Used</span>
-                </div>
-            </div>
-            
             <Card className="shadow-lg gamify-card">
                 <CardHeader>
                     <CardTitle className="font-headline text-2xl">Quiz: {taskInfo?.name}</CardTitle>

@@ -6,7 +6,7 @@ interface PerformanceMetric {
   name: string;
   duration: number;
   timestamp: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 class PerformanceMonitor {
@@ -20,7 +20,7 @@ class PerformanceMonitor {
   startTimer(name: string): (metadata?: Record<string, any>) => PerformanceMetric {
     const startTime = Date.now();
     
-    return (metadata?: Record<string, any>) => {
+    return (metadata?: Record<string, unknown>) => {
       const duration = Date.now() - startTime;
       const metric: PerformanceMetric = {
         name,
@@ -46,7 +46,7 @@ class PerformanceMonitor {
   async timeFunction<T>(
     name: string,
     fn: () => Promise<T>,
-    metadata?: Record<string, any>
+    metadata?: Record<string, unknown>
   ): Promise<T> {
     const endTimer = this.startTimer(name);
     

@@ -7,20 +7,20 @@ import { Zap, Coins } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function PowerUpActivator() {
-  const { powerUps, buyPowerUp, points } = useGamification();
+  const gamification = useGamification();
   const { toast } = useToast();
 
-  const handleBuyPowerUp = (powerUpId: string, powerUpName: string) => {
-    const success = buyPowerUp(powerUpId);
+  const handleBuyPowerUp = async (powerUpId: string, powerUpName: string) => {
+    const success = await gamification.purchasePowerUp(powerUpId);
     if (success) {
       toast({
         title: "Power-up Purchased! ✨",
-        description: `${powerUpName} activated! (-100 points)`,
+        description: `${powerUpName} activated!`,
       });
     } else {
       toast({
-        title: "Insufficient Points 💸",
-        description: "You need 100 points to purchase this power-up.",
+        title: "Purchase Failed 💸",
+        description: "Unable to purchase power-up. Check your points balance.",
         variant: "destructive",
       });
     }
@@ -40,11 +40,15 @@ export function PowerUpActivator() {
             Activate power-ups to enhance your study session
           </p>
           <div className="space-y-3">
-            {powerUps.map(powerUp => (
+            {gamification.availablePowerUps.map(powerUp => {
+              const isActive = gamification.hasActivePowerUp(powerUp.effect);
+              const canAfford = (gamification.stats?.points || 0) >= powerUp.cost;
+              
+              return (
               <div 
                 key={powerUp.id} 
                 className={`p-3 rounded-lg border ${
-                  powerUp.active 
+                  isActive 
                     ? 'border-yellow-500 bg-yellow-500/10' 
                     : 'border-muted'
                 }`}
@@ -55,9 +59,9 @@ export function PowerUpActivator() {
                     <div>
                       <h3 className="font-medium">{powerUp.name}</h3>
                       <p className="text-sm text-muted-foreground">{powerUp.description}</p>
-                      {powerUp.active && powerUp.endTime && (
+                      {isActive && (
                         <p className="text-xs text-yellow-600 mt-1">
-                          Active until {powerUp.endTime.toLocaleTimeString()}
+                          Currently Active
                         </p>
                       )}
                     </div>
@@ -66,23 +70,24 @@ export function PowerUpActivator() {
                     <Button
                       size="sm"
                       onClick={() => handleBuyPowerUp(powerUp.id, powerUp.name)}
-                      disabled={powerUp.active || points < 100}
-                      className={powerUp.active ? 'opacity-50' : ''}
+                      disabled={isActive || !canAfford || gamification.isLoading}
+                      className={(!canAfford || isActive) ? 'opacity-50' : ''}
                     >
-                      {powerUp.active ? 'Active' : (
+                      {isActive ? 'Active' : canAfford ? (
                         <div className="flex items-center gap-1">
                           <Coins className="h-3 w-3" />
-                          <span>Buy (100)</span>
+                          <span>Buy ({powerUp.cost})</span>
                         </div>
-                      )}
+                      ) : 'Need Points'}
                     </Button>
-                    {points < 100 && !powerUp.active && (
-                      <span className="text-xs text-red-500">Need {100 - points} more points</span>
+                    {!canAfford && !isActive && (
+                      <span className="text-xs text-red-500">Need {powerUp.cost - (gamification.stats?.points || 0)} more points</span>
                     )}
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
@@ -91,7 +96,7 @@ export function PowerUpActivator() {
             </div>
             <div className="flex items-center gap-1">
               <Coins className="h-3 w-3 text-yellow-500" />
-              <span className="font-medium">{points} points</span>
+              <span className="font-medium">{gamification.stats?.points || 0} points</span>
             </div>
           </div>
         </div>

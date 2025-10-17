@@ -5,7 +5,9 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { GamificationProvider } from '@/contexts/gamification-context';
 import { Analytics } from "@vercel/analytics/next";
 import { ErrorBoundary } from '@/components/error-boundary';
-// Removed unused import                                                                  
+import '@/lib/telemetry-config'; // Configure telemetry early
+import '@/lib/connection-cleanup'; // Initialize connection cleanup
+import '@/lib/inactivity-detector'; // Initialize inactivity detection                                                                  
 export const metadata: Metadata = {
   title: 'StudyMaster AI',
   description: 'AI-powered gamified learning platform',

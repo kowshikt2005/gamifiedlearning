@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Clock, Play, Pause, Square, RotateCcw, Timer, Zap } from 'lucide-react';
 import { useStudySession } from '@/contexts/study-session-context';
-import { useGamification } from '@/contexts/gamification-context';
+// import { useGamification } from '@/contexts/gamification-context';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -18,7 +18,7 @@ interface PersistentTimerProps {
 export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerProps) {
     const { user, getValidToken } = useAuth();
     const { taskInfo, studyDuration, setStudyDuration, timerState, updateTimerState, resetTimer } = useStudySession();
-    const { addStudyTime, addPoints, incrementStreak, powerUps } = useGamification();
+    // const gamification = useGamification(); // Will be used for future gamification features
     const { toast } = useToast();
 
     // Handle timer completion
@@ -31,20 +31,12 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
             });
             
             const minutesStudied = Math.floor(studyDuration / 60);
-            let pointsEarned = minutesStudied * 5; // NEW SYSTEM: 5 points per minute for completed session
+            const pointsEarned = minutesStudied * 5; // NEW SYSTEM: 5 points per minute for completed session
             
-            // Check for 2x power-up
-            const doublePointsActive = powerUps.some(p => p.id === 'double-points' && p.active);
-            if (doublePointsActive) {
-                pointsEarned *= 2; // Apply 2x multiplier
-            }
+            // Gamification is now handled automatically through study session processing
             
             // Use setTimeout to ensure state updates happen after render
             setTimeout(() => {
-                // Update gamification in next tick
-                addPoints(pointsEarned);
-                addStudyTime(minutesStudied);
-                incrementStreak();
                 
                 toast({
                     title: "Study Session Complete! 🎉",
@@ -105,7 +97,7 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
                 }
             }, 500);
         }
-    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, addPoints, addStudyTime, incrementStreak, user, taskInfo, toast, onComplete, getValidToken, powerUps]);
+    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, user, taskInfo, toast, onComplete, getValidToken]);
 
     // Start timer
     const handleStart = useCallback(() => {
@@ -165,12 +157,10 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
             // NEW SYSTEM: Early end penalty of -25 points
             const partialPoints = -25;
             
-            // Always apply penalty for early end, regardless of time studied
-            addPoints(partialPoints);
+            // Gamification penalties are handled automatically through study session processing
             
             if (minutesStudied > 0) {
-                // Still track study time even if ended early
-                addStudyTime(minutesStudied);
+                // Session tracking is handled automatically
                 
                 // Save partial session to database - but don't block UI
                 if (user && taskInfo) {
@@ -229,7 +219,7 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
                 onEarlyFinish();
             }
         }
-    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, studyDuration, addPoints, addStudyTime, user, taskInfo, toast, onEarlyFinish, updateTimerState, getValidToken]);
+    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, studyDuration, user, taskInfo, toast, onEarlyFinish, updateTimerState, getValidToken]);
 
     // Reset timer
     const handleReset = useCallback(() => {

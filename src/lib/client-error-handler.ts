@@ -33,7 +33,7 @@ export async function resilientFetch(
   retryConfig: Partial<RetryConfig> = {}
 ): Promise<Response> {
   const config = { ...defaultRetryConfig, ...retryConfig };
-  let lastError: Error;
+  let lastError: Error = new Error('Unknown error');
 
   for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
     try {
@@ -58,7 +58,7 @@ export async function resilientFetch(
             config.maxDelay
           );
 
-          console.log(`Request failed (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms...`);
+          console.warn(`Request failed (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -77,7 +77,7 @@ export async function resilientFetch(
           config.maxDelay
         );
 
-        console.log(`Network error (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms...`);
+        console.warn(`Network error (attempt ${attempt}/${config.maxRetries}), retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -86,7 +86,7 @@ export async function resilientFetch(
     }
   }
 
-  throw lastError!;
+  throw lastError;
 }
 
 /**
@@ -114,23 +114,24 @@ export async function parseApiError(response: Response): Promise<string> {
 /**
  * Show user-friendly error message
  */
-export function getUserFriendlyErrorMessage(error: any): string {
+export function getUserFriendlyErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error;
   }
 
-  if (error?.message) {
+  const err = error as any; // Type assertion for error handling
+  if (err?.message) {
     // Network errors
-    if (error.message.includes('Failed to fetch') || error.message.includes('network')) {
+    if (err.message.includes('Failed to fetch') || err.message.includes('network')) {
       return 'Network connection issue. Please check your internet connection and try again.';
     }
 
     // Database connection errors
-    if (error.message.includes('Database connection') || error.message.includes('temporarily unavailable')) {
+    if (err.message.includes('Database connection') || err.message.includes('temporarily unavailable')) {
       return 'Service is temporarily unavailable. Please try again in a moment.';
     }
 
-    return error.message;
+    return err.message;
   }
 
   return 'An unexpected error occurred. Please try again.';
@@ -186,7 +187,7 @@ export class ApiClient {
   /**
    * POST request
    */
-  async post<T>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<T> {
+  async post<T>(endpoint: string, data?: unknown, headers?: Record<string, string>): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
@@ -197,7 +198,7 @@ export class ApiClient {
   /**
    * PUT request
    */
-  async put<T>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<T> {
+  async put<T>(endpoint: string, data?: unknown, headers?: Record<string, string>): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,

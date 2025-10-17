@@ -66,7 +66,9 @@ export async function withDatabaseResilience<T>(
         config.maxDelay
       );
 
-      console.log(`Retrying in ${delay}ms...`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Retrying in ${delay}ms...`);
+      }
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -123,7 +125,7 @@ export class ResilientDatabase {
   /**
    * Find documents with resilience
    */
-  async findOne(collectionName: string, query: any) {
+  async findOne(collectionName: string, query: Record<string, unknown>) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).findOne(query);
@@ -133,7 +135,7 @@ export class ResilientDatabase {
   /**
    * Find multiple documents with resilience
    */
-  async find(collectionName: string, query: any, options?: any) {
+  async find(collectionName: string, query: Record<string, unknown>, options?: Record<string, unknown>) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).find(query, options).toArray();
@@ -143,7 +145,7 @@ export class ResilientDatabase {
   /**
    * Insert document with resilience
    */
-  async insertOne(collectionName: string, document: any) {
+  async insertOne(collectionName: string, document: Record<string, unknown>) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).insertOne(document);
@@ -153,7 +155,7 @@ export class ResilientDatabase {
   /**
    * Update document with resilience
    */
-  async updateOne(collectionName: string, filter: any, update: any, options?: any) {
+  async updateOne(collectionName: string, filter: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).updateOne(filter, update, options);
@@ -163,7 +165,7 @@ export class ResilientDatabase {
   /**
    * Delete document with resilience
    */
-  async deleteOne(collectionName: string, filter: any) {
+  async deleteOne(collectionName: string, filter: Record<string, unknown>) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).deleteOne(filter);
@@ -173,7 +175,7 @@ export class ResilientDatabase {
   /**
    * Count documents with resilience
    */
-  async countDocuments(collectionName: string, query: any = {}) {
+  async countDocuments(collectionName: string, query: Record<string, unknown> = {}) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).countDocuments(query);
@@ -183,7 +185,7 @@ export class ResilientDatabase {
   /**
    * Aggregate with resilience
    */
-  async aggregate(collectionName: string, pipeline: any[]) {
+  async aggregate(collectionName: string, pipeline: Record<string, unknown>[]) {
     return withDatabaseResilience(async () => {
       const db = await getDatabase();
       return db.collection(collectionName).aggregate(pipeline).toArray();

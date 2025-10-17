@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Clock, Play, Pause, Square, RotateCcw, Timer, Zap } from 'lucide-react';
 import { useStudySession } from '@/contexts/study-session-context';
-import { useGamification } from '@/contexts/gamification-context';
+// import { useGamification } from '@/contexts/gamification-context';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -18,7 +18,7 @@ interface IntegratedTimerProps {
 export function IntegratedTimer({ onComplete, onEarlyFinish }: IntegratedTimerProps) {
     const { user } = useAuth();
     const { taskInfo, studyDuration, setStudyDuration } = useStudySession();
-    const { addStudyTime, addPoints, incrementStreak } = useGamification();
+    // const gamification = useGamification(); // Will be used for future gamification features
     const { toast } = useToast();
     
     // Timer state
@@ -51,10 +51,7 @@ export function IntegratedTimer({ onComplete, onEarlyFinish }: IntegratedTimerPr
         
         // Use setTimeout to ensure state updates happen after render
         setTimeout(() => {
-            // Update gamification in next tick
-            addPoints(pointsEarned);
-            addStudyTime(minutesStudied);
-            incrementStreak();
+            // Gamification is now handled automatically through study session processing
             
             toast({
                 title: "Study Session Complete! 🎉",
@@ -99,7 +96,7 @@ export function IntegratedTimer({ onComplete, onEarlyFinish }: IntegratedTimerPr
                 onComplete(studyDuration);
             }
         }, 500);
-    }, [studyDuration, addPoints, addStudyTime, incrementStreak, user, taskInfo, toast, onComplete]);
+    }, [studyDuration, user, taskInfo, toast, onComplete]);
 
     // Main timer logic
     useEffect(() => {
@@ -189,9 +186,7 @@ export function IntegratedTimer({ onComplete, onEarlyFinish }: IntegratedTimerPr
             const partialPoints = Math.floor(minutesStudied * 1.5); // 1.5 points per minute for early finish
             
             if (minutesStudied > 0) {
-                // Update gamification
-                addPoints(partialPoints);
-                addStudyTime(minutesStudied);
+                // Gamification is handled automatically through study session processing
                 
                 // Save partial session to database
                 if (user && taskInfo) {
@@ -234,7 +229,7 @@ export function IntegratedTimer({ onComplete, onEarlyFinish }: IntegratedTimerPr
                 onEarlyFinish();
             }
         }
-    }, [isActive, isPaused, elapsedTime, studyDuration, addPoints, addStudyTime, user, taskInfo, toast, onEarlyFinish]);
+    }, [isActive, isPaused, elapsedTime, studyDuration, user, taskInfo, toast, onEarlyFinish]);
 
     // Reset timer
     const handleReset = useCallback(() => {

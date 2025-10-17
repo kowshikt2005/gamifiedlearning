@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { completedSessions } = useStudySession();
-  const { points, level, streak } = useGamification();
+  const gamification = useGamification();
   const { sessionData } = useStudyData();
 
   // Fetch tasks from database with auto-refresh
@@ -102,6 +102,31 @@ export default function DashboardPage() {
     fetchTasks();
   }, [fetchTasks]); // Fixed dependency
 
+  // Refresh gamification stats when dashboard loads
+  useEffect(() => {
+    const refreshGamificationStats = async () => {
+      try {
+        await gamification.refreshStats();
+      } catch (error) {
+        console.error('Failed to refresh gamification stats:', error);
+      }
+    };
+
+    refreshGamificationStats();
+  }, [gamification]);
+
+  // Refresh stats when page becomes visible (user returns from quiz)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        gamification.refreshStats().catch(console.error);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [gamification]);
+
   // Remove periodic refresh - rely on cache and manual refresh instead
   
   // Memoized calculations
@@ -133,12 +158,12 @@ export default function DashboardPage() {
             <CardDescription>Level</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <Trophy className="h-8 w-8 text-yellow-500 fill-yellow-500" />
-              {level}
+              {gamification.stats?.level || 1}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-xs text-muted-foreground">
-              {points} total points
+              {gamification.stats?.points || 0} total points
             </div>
           </CardContent>
         </Card>
@@ -148,7 +173,7 @@ export default function DashboardPage() {
             <CardDescription>Streak</CardDescription>
             <CardTitle className="text-4xl flex items-center gap-2">
               <Flame className="h-8 w-8 text-red-500" />
-              {streak}
+              {gamification.stats?.streak.currentStreak || 0}
             </CardTitle>
           </CardHeader>
           <CardContent>

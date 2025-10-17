@@ -20,6 +20,8 @@
     "verify-setup": "node scripts/verify-setup.js",
     "optimize:db": "node scripts/optimize-database.js",
     "test:db": "node scripts/test-db-connection.js",
+    "monitor:db": "node scripts/monitor-connections.js",
+    "cleanup:connections": "node -e \"require('./src/lib/aggressive-connection-manager.ts').aggressiveConnectionManager.forceCleanup()\"",
     "test:deployment": "node scripts/test-deployment.js",
     "postinstall": "echo 'Installation complete! Run npm run setup to configure the application.'"
   },

@@ -188,35 +188,28 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
 
         // Check if already processed or currently being processed
         if (processedSessionsRef.current.has(session.id)) {
-            console.log('⚠️ Session already processed, skipping:', session.id);
             return;
         }
         
         if (pendingSessionsRef.current.has(session.id)) {
-            console.log('⚠️ Session already being processed, skipping:', session.id);
             return;
         }
         
         // Mark as pending immediately to prevent any duplicate calls
         pendingSessionsRef.current.add(session.id);
         processedSessionsRef.current.add(session.id);
-        console.log('📝 Processing session:', session.id);
 
         // Check for duplicates in state before updating
-        const existingSession = completedSessions.find((s: CompletedSession) => s.id === session.id);
-        if (existingSession) {
-            // eslint-disable-next-line no-console
-            console.log('⚠️ Session already in state, skipping:', session.id);
-            return;
-        }
-
-        // Add to state (only if not duplicate)
-        setCompletedSessions((prev: CompletedSession[]) => [...prev, session]);
+        setCompletedSessions((prev: CompletedSession[]) => {
+            const existingSession = prev.find((s: CompletedSession) => s.id === session.id);
+            if (existingSession) {
+                console.log('⚠️ Session already in state, skipping:', session.id);
+                return prev; // Return existing state unchanged
+            }
+            return [...prev, session]; // Add new session
+        });
         
-        // Calculate study time in minutes
-        const studyTimeInMinutes = Math.floor(studyDuration / 60);
-        
-        // Save to database using robust session saver
+        // Save to database using robust session saver (async, non-blocking)
         const saveToDatabase = async () => {
             try {
                 const token = getValidToken();
@@ -227,16 +220,20 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
 
                 // Check if already processed by session saver
                 if (sessionSaver.isProcessed(session.id)) {
-                    console.log('⚠️ Session already processed by session saver:', session.id);
                     return;
                 }
 
-                // Calculate quiz score based on answers
-                const totalQuestions = quizAnswers.length;
-                const correctAnswers = quizAnswers.filter(qa => {
-                    if (!quizQuestions || qa.questionIndex >= quizQuestions.length) return false;
-                    const question = quizQuestions[qa.questionIndex];
-                    return question.answer === qa.answer;
+                // Calculate study time in minutes
+                const studyTimeInMinutes = Math.floor(studyDuration / 60);
+                
+                // Calculate quiz score based on current answers
+                const currentQuizAnswers = quizAnswers || [];
+                const currentQuizQuestions = quizQuestions || [];
+                const totalQuestions = currentQuizAnswers.length;
+                const correctAnswers = currentQuizAnswers.filter(qa => {
+                    if (qa.questionIndex >= currentQuizQuestions.length) return false;
+                    const question = currentQuizQuestions[qa.questionIndex];
+                    return question && question.answer === qa.answer;
                 }).length;
                 const calculatedScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 85;
 
@@ -246,9 +243,9 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
                     duration: Math.max(1, Math.floor(studyTimeInMinutes)),
                     score: Math.max(0, Math.min(100, calculatedScore)),
                     points: Math.max(0, Math.floor(session.points || 0)),
-                    quizAnswers: (quizAnswers || []).map((qa: QuizAnswer) => {
-                        const isCorrect = quizQuestions && qa.questionIndex < quizQuestions.length 
-                            ? quizQuestions[qa.questionIndex].answer === qa.answer
+                    quizAnswers: currentQuizAnswers.map((qa: QuizAnswer) => {
+                        const isCorrect = qa.questionIndex < currentQuizQuestions.length 
+                            ? currentQuizQuestions[qa.questionIndex]?.answer === qa.answer
                             : false;
                         return {
                             questionIndex: Math.max(0, Math.floor(qa.questionIndex || 0)),
@@ -264,18 +261,18 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
             } catch (error) {
                 // Silently handle database save errors - don't show to user
                 console.warn('Study session save failed (continuing with local storage):', error instanceof Error ? error.message : 'Unknown error');
+            } finally {
+                // Remove from pending set when done
+                pendingSessionsRef.current.delete(session.id);
             }
         };
 
         // Save in background without blocking UI
-        saveToDatabase().finally(() => {
-            // Remove from pending set when done
-            pendingSessionsRef.current.delete(session.id);
-        });
+        saveToDatabase();
         
         // Note: Gamification points are handled separately in the feedback page
         // This prevents duplicate point additions and dependency issues
-    }, [user?.username, studyDuration, quizAnswers, quizQuestions, getValidToken]); // Include quiz data for database save
+    }, [user, studyDuration, getValidToken]); // Removed quizAnswers and quizQuestions from deps to prevent loops
 
     // Sync timer duration with study duration
     useEffect(() => {

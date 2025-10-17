@@ -14,9 +14,10 @@ export interface ApiError {
 /**
  * Classify database errors and determine appropriate response
  */
-export function classifyDatabaseError(error: any): ApiError {
-  const errorMessage = error?.message || 'Unknown database error';
-  const errorCode = error?.code || error?.name;
+export function classifyDatabaseError(error: unknown): ApiError {
+  const err = error as any; // Type assertion for error handling
+  const errorMessage = err?.message || 'Unknown database error';
+  const errorCode = err?.code || err?.name;
 
   // Network connection errors (retryable)
   if (errorMessage.includes('ECONNRESET') || 
@@ -77,7 +78,7 @@ export function classifyDatabaseError(error: any): ApiError {
 /**
  * Create standardized error response
  */
-export function createErrorResponse(error: any): NextResponse {
+export function createErrorResponse(error: unknown): NextResponse {
   const apiError = classifyDatabaseError(error);
   
   console.error('API Error:', {
@@ -85,7 +86,7 @@ export function createErrorResponse(error: any): NextResponse {
     code: apiError.code,
     status: apiError.status,
     retryable: apiError.retryable,
-    originalError: error?.message || error
+    originalError: (error as any)?.message || error
   });
 
   const headers: Record<string, string> = {
@@ -117,7 +118,7 @@ export function createErrorResponse(error: any): NextResponse {
  * Wrapper for API route handlers with error handling
  */
 export function withErrorHandling(handler: Function) {
-  return async function(request: Request, ...args: any[]) {
+  return async function(request: Request, ...args: unknown[]) {
     try {
       return await handler(request, ...args);
     } catch (error) {
@@ -129,8 +130,8 @@ export function withErrorHandling(handler: Function) {
 /**
  * Check if an error is a database connection issue
  */
-export function isDatabaseConnectionError(error: any): boolean {
-  const errorMessage = error?.message || '';
+export function isDatabaseConnectionError(error: unknown): boolean {
+  const errorMessage = (error as any)?.message || '';
   return errorMessage.includes('ECONNRESET') || 
          errorMessage.includes('ENOTFOUND') || 
          errorMessage.includes('ETIMEDOUT') ||

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { performanceMonitor } from '@/lib/performance-monitor';
+import { getDatabaseHealth } from '@/lib/mongodb';
 import jwt from 'jsonwebtoken';
 
 async function getUserFromToken(request: NextRequest) {
@@ -53,11 +54,25 @@ export async function GET(request: NextRequest) {
 
     const slowOperations = performanceMonitor.getSlowOperations(10);
 
+    // Get database health and connection statistics
+    const databaseHealth = await getDatabaseHealth();
+
     return NextResponse.json({
-      overview,
-      slowOperations,
-      totalOperations: operationNames.length,
-      timestamp: new Date().toISOString()
+      performance: {
+        overview,
+        slowOperations,
+        totalOperations: operationNames.length
+      },
+      database: {
+        connected: databaseHealth.connected,
+        connectionStats: databaseHealth.connectionStats,
+        error: databaseHealth.error
+      },
+      system: {
+        timestamp: new Date().toISOString(),
+        nodeEnv: process.env.NODE_ENV,
+        platform: process.platform
+      }
     });
 
   } catch (error: unknown) {

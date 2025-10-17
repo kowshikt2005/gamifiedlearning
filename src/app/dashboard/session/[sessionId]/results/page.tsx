@@ -6,7 +6,7 @@ import { useStudySession } from '@/contexts/study-session-context';
 import { useGamification } from '@/contexts/gamification-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ArrowRight, TrendingUp, Target, Star, Clock, CheckCircle, Trophy, Zap, Flame } from 'lucide-react';
+import { Loader2, ArrowRight, TrendingUp, Target, Star, Clock, CheckCircle, Trophy, Zap } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { analyzeQuizPerformance, type AnalyzeQuizPerformanceOutput } from '@/ai/flows/analyze-quiz-performance';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,15 +15,16 @@ export default function SessionResultsPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, quizQuestions, quizAnswers, coinsUsed, studyDuration, penaltyPoints, resetSession, addCompletedSession } = useStudySession();
-    const { points, level, streak, addQuizPoints, completeChallenge, awardBonusCoin } = useGamification();
+    const gamification = useGamification();
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
     const [pointsAwarded, setPointsAwarded] = useState(false);
-
     useEffect(() => {
         setIsClient(true);
     }, []);
+    
+    // Header now uses static text to prevent garbage values
 
     useEffect(() => {
         if (isClient && quizQuestions && taskInfo) {
@@ -87,62 +88,51 @@ export default function SessionResultsPage() {
         // Set flag immediately to prevent any duplicate calls
         pointsCalculationAttempted.current = true;
         
-        // eslint-disable-next-line no-console
-        console.log('🎯 Calculating points for quiz...', {
-            correctAnswers,
-            wrongAnswers,
-            coinsUsed,
-            totalQuestions,
-            studyDuration
-        });
+        const handleQuizCompletion = async () => {
+            try {
+                console.log('🎯 Calculating points for quiz...', {
+                    correctAnswers,
+                    wrongAnswers,
+                    coinsUsed,
+                    totalQuestions,
+                    studyDuration
+                });
+                
+                // Process quiz completion with new gamification system
+                const result = await gamification.processQuizCompletion({
+                    correctAnswers,
+                    wrongAnswers,
+                    answersRevealed: coinsUsed,
+                    totalQuestions,
+                    timeSpent: studyDuration
+                });
+                
+                const totalPoints = result?.pointsEarned || 0;
+                setFinalPoints(totalPoints);
+                setPointsAwarded(true);
+                
+                // Save session with setTimeout to prevent dependency loop
+                if (taskInfo && params.sessionId && !sessionSaveAttempted.current) {
+                    sessionSaveAttempted.current = true;
+                    
+                    setTimeout(() => {
+                        addCompletedSession({
+                            id: params.sessionId as string,
+                            taskName: taskInfo.name,
+                            points: totalPoints
+                        });
+                    }, 0);
+                }
+                
+            } catch (error) {
+                console.error('Failed to process quiz completion:', error);
+                setFinalPoints(0);
+                setPointsAwarded(true);
+            }
+        };
         
-        // Use enhanced addQuizPoints function
-        const quizPoints = addQuizPoints(
-            correctAnswers, 
-            wrongAnswers, 
-            coinsUsed, 
-            totalQuestions, 
-            studyDuration // Pass study duration for speed bonus calculation
-        );
-        
-        // eslint-disable-next-line no-console
-        console.log('✅ Points calculated:', quizPoints);
-        
-        // Subtract penalty points for early session end
-        const totalPoints = quizPoints - penaltyPoints;
-        setFinalPoints(totalPoints);
-        setPointsAwarded(true);
-        
-        // Save session immediately after calculating points (prevents infinite loops)
-        if (taskInfo && params.sessionId && !sessionSaveAttempted.current) {
-            sessionSaveAttempted.current = true;
-            // eslint-disable-next-line no-console
-            console.log('💾 Saving session immediately after points calculation:', {
-                id: params.sessionId,
-                taskName: taskInfo.name,
-                points: totalPoints,
-                timestamp: new Date().toISOString()
-            });
-            
-            addCompletedSession({
-                id: params.sessionId as string,
-                taskName: taskInfo.name,
-                points: totalPoints
-            });
-        }
-        
-        // Award bonus coin for perfect score
-        if (correctAnswers === totalQuestions && totalQuestions > 0) {
-            awardBonusCoin();
-            completeChallenge('perfect-score');
-        }
-        
-        // Check for speed demon challenge (quiz completed in under 5 minutes)
-        if (studyDuration < 300) {
-            completeChallenge('speed-demon');
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isClient, quizQuestions?.length, quizAnswers.length]); // Intentionally minimal deps - ref guard prevents duplicates
+        handleQuizCompletion();
+    }, [isClient, quizQuestions?.length, quizAnswers.length]); // Minimal deps to prevent loops
 
     // Track if session has been saved to prevent duplicate saves
     const sessionSaveAttempted = useRef(false);
@@ -157,10 +147,16 @@ export default function SessionResultsPage() {
         return `${h > 0 ? `${h}h ` : ''}${m > 0 ? `${m}m ` : ''}${s}s`;
     }, []);
 
-    const handleDone = useCallback(() => {
+    const handleDone = useCallback(async () => {
+        // Only refresh stats when user is actually leaving the page
+        try {
+            await gamification.refreshStats();
+        } catch (error) {
+            console.error('Failed to refresh stats on navigation:', error);
+        }
         resetSession();
         router.push('/dashboard');
-    }, [resetSession, router]);
+    }, [resetSession, router, gamification]);
 
     if (!isClient || !quizQuestions) {
         return (
@@ -173,28 +169,6 @@ export default function SessionResultsPage() {
     
     return (
         <div className="container mx-auto max-w-4xl py-8">
-            {/* Gamification Header */}
-            <div className="flex flex-wrap justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl animate-gradientShift gap-4">
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2 bg-white dark:bg-black/20 px-4 py-2 rounded-full shadow-md">
-                        <Trophy className="h-5 w-5 text-primary" />
-                        <span className="font-bold">Session Complete!</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-yellow-100 dark:bg-yellow-900/30 px-4 py-2 rounded-full">
-                        <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-                        <span className="font-bold">{points} Total Points</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-green-100 dark:bg-green-900/30 px-4 py-2 rounded-full">
-                        <Flame className="h-5 w-5 text-red-500" />
-                        <span className="font-bold">{streak} Day Streak</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-4 py-2 rounded-full">
-                    <Zap className="h-5 w-5 text-blue-500" />
-                    <span className="font-bold">Level {level}</span>
-                </div>
-            </div>
-            
             <Card className="shadow-lg gamify-card">
                 <CardHeader className="text-center">
                     <CardTitle className="text-3xl font-headline">Excellent Work!</CardTitle>
