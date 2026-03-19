@@ -1,30 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 import { generateFlashcards } from '@/ai/flows/generate-flashcards-from-pdf';
-import { 
+import {
   sanitizeFlashcardGenerationRequest
 } from '@/lib/models/flashcard';
-
-async function getUserFromToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('No token provided');
-  }
-
-  const token = authHeader.substring(7);
-  const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'fallback-secret') as {
-    userId: string;
-    email: string;
-  };
-
-  return decoded.userId;
-}
+import { getUserStringIdFromRequest } from '@/lib/jwt-utils';
 
 export async function POST(request: NextRequest) {
   try {
     // Authenticate user
-    const userId = await getUserFromToken(request);
+    const userId = getUserStringIdFromRequest(request);
     
     // Parse and validate request body
     const body = await request.json();

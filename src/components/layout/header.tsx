@@ -7,7 +7,6 @@ import {
   Search,
   BarChart2,
   PlusCircle,
-  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -85,13 +84,6 @@ export function Header() {
               <BarChart2 className="h-5 w-5" />
               Analytics
             </Link>
-            <Link
-                href="#"
-                className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground"
-              >
-                <Settings className="h-5 w-5" />
-                Settings
-              </Link>
           </nav>
         </SheetContent>
       </Sheet>
@@ -121,9 +113,6 @@ export function Header() {
           <DropdownMenuLabel>
             {user?.username || 'My Account'}
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>Settings</DropdownMenuItem>
-          <DropdownMenuItem>Support</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
         </DropdownMenuContent>

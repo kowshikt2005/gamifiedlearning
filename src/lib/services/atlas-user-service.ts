@@ -10,6 +10,24 @@ import { User as LegacyUser, UserProgress, StudySession, defaultUserProgress } f
 import bcrypt from 'bcryptjs';
 import { ObjectId, Int32 } from 'mongodb';
 
+/**
+ * Unified level calculation: progressive points per level.
+ * Level 2 = 100pts, Level 3 = 250pts (100+150), Level 4 = 450pts (100+150+200), etc.
+ * Each subsequent level requires 50 more points than the previous.
+ */
+function calculateLevelFromPoints(totalPoints: number): number {
+  if (totalPoints < 100) return 1;
+  let currentLevel = 1;
+  let pointsUsed = 0;
+  let pointsForNextLevel = 100;
+  while (pointsUsed + pointsForNextLevel <= totalPoints) {
+    pointsUsed += pointsForNextLevel;
+    currentLevel++;
+    pointsForNextLevel = 100 + (currentLevel - 1) * 50;
+  }
+  return currentLevel;
+}
+
 // Atlas User interface (matches our new schema)
 interface AtlasUser {
   _id?: ObjectId;
@@ -74,7 +92,7 @@ export class AtlasUserService {
       points: 0,
       streak: 0,
       quizAccuracy: 0,
-      dailyGoal: 500, // 500 points per day
+      dailyGoal: 30, // 30 minutes per day (matching client default)
       totalStudyTime: 0,
       badges: defaultUserProgress.badges,
       achievements: defaultUserProgress.achievements,
@@ -139,7 +157,7 @@ export class AtlasUserService {
       _id: atlasUser._id,
       username: atlasUser.username,
       email: atlasUser.email,
-      password: atlasUser.password,
+      password: '', // Never expose password hash to client
       createdAt: atlasUser.createdAt,
       updatedAt: atlasUser.updatedAt,
       progress: {
@@ -182,9 +200,6 @@ export class AtlasUserService {
     const statsUpdates: any = {
       updatedAt: new Date()
     };
-
-    // Add required fields if not present
-    statsUpdates.createdAt = new Date();
 
     // Validate and sanitize data types before database operations
     if (updates.level !== undefined && typeof updates.level === 'number') {
@@ -249,7 +264,10 @@ export class AtlasUserService {
     try {
       await userStats.updateOne(
         { userId: new ObjectId(userId) },
-        { $set: statsUpdates },
+        {
+          $set: statsUpdates,
+          $setOnInsert: { createdAt: new Date() }
+        },
         { upsert: true }
       );
 
@@ -269,15 +287,16 @@ export class AtlasUserService {
     const userStats = db.collection('userstats');
     
     // Create session in tasks collection
-    // Use a more unique identifier to prevent duplicates
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use original session ID to maintain link with quiz collection
+    const sessionId = session.id || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newTask = {
       userId: new ObjectId(userId),
       sessionId,
       title: session.taskName,
       status: 'completed',
-      studyTime: new Int32(session.duration), // Ensure it's an integer
-      pointsEarned: new Int32(session.points), // Ensure it's an integer
+      studyTime: new Int32(session.duration),
+      pointsEarned: new Int32(session.points),
+      score: Math.max(0, Math.min(100, session.score || 0)),
       createdAt: session.completedAt,
       updatedAt: new Date(),
       completedAt: session.completedAt
@@ -294,20 +313,25 @@ export class AtlasUserService {
     
     const newPoints = currentPoints + session.points;
     const newStudyTime = currentStudyTime + session.duration;
-    const newLevel = Math.floor(newPoints / 100) + 1;
+    // Progressive level calculation matching client formula:
+    // Level 2 = 100pts, Level 3 = 250pts (100+150), Level 4 = 450pts (100+150+200), etc.
+    const newLevel = calculateLevelFromPoints(newPoints);
     
-    // Update streak logic
+    // Update streak logic using UTC calendar days to avoid timezone issues
     const today = new Date();
+    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const lastStudyDate = stats?.lastStudyDate;
     let newStreak = currentStreak;
-    
+
     if (lastStudyDate) {
-      const daysDiff = Math.floor((today.getTime() - lastStudyDate.getTime()) / (1000 * 60 * 60 * 24));
+      const lastUTC = Date.UTC(lastStudyDate.getUTCFullYear(), lastStudyDate.getUTCMonth(), lastStudyDate.getUTCDate());
+      const daysDiff = Math.round((todayUTC - lastUTC) / (1000 * 60 * 60 * 24));
       if (daysDiff === 1) {
         newStreak += 1;
       } else if (daysDiff > 1) {
         newStreak = 1;
       }
+      // daysDiff === 0 means same day, keep streak unchanged
     } else {
       newStreak = 1;
     }
@@ -360,13 +384,18 @@ export class AtlasUserService {
 
     const sessions = [];
     for (const task of userTasks) {
-      // Get quiz score for this session
-      const quiz = await quizzes.findOne({ sessionId: task.sessionId });
-      
+      // Read score from task document first (new sessions store it directly)
+      // Fall back to quiz collection JOIN for older sessions
+      let score = task.score;
+      if (score === undefined || score === null) {
+        const quiz = await quizzes.findOne({ sessionId: task.sessionId });
+        score = quiz?.score || 0;
+      }
+
       sessions.push({
         date: task.createdAt.toISOString().split('T')[0],
         duration: task.studyTime ? (typeof task.studyTime === 'number' ? task.studyTime : task.studyTime.valueOf()) : 0,
-        score: quiz?.score || 0,
+        score: typeof score === 'number' ? score : 0,
         points: task.pointsEarned ? (typeof task.pointsEarned === 'number' ? task.pointsEarned : task.pointsEarned.valueOf()) : 0
       });
     }

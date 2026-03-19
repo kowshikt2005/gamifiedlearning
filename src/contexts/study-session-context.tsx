@@ -88,7 +88,7 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
     const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     
     // Integrate with gamification system
-    const { addStudySessionPoints, incrementStreak, checkQuestProgress, powerUps, addStudyTime } = useGamification();
+    const { addPoints, addStudySessionPoints, incrementStreak, checkQuestProgress, addStudyTime } = useGamification();
 
     // Load completed sessions from localStorage on initial client-side render
     useEffect(() => {
@@ -115,12 +115,14 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
         }
     }, [completedSessions]);
 
-    // Global timer logic - runs independently of component visibility
+    // Global timer logic - interval created once when active, ticks independently.
+    // NOT dependent on timeRemaining to avoid interval churn during heavy rendering.
     useEffect(() => {
-        if (timerState.isActive && timerState.timeRemaining > 0) {
+        if (timerState.isActive) {
             timerIntervalRef.current = setInterval(() => {
                 setTimerState((prev: typeof timerState) => {
-                    const newTimeRemaining = Math.max(0, prev.timeRemaining - 1);
+                    if (prev.timeRemaining <= 0) return prev; // Already done
+                    const newTimeRemaining = prev.timeRemaining - 1;
                     const newElapsedTime = studyDuration - newTimeRemaining;
                     return {
                         ...prev,
@@ -142,7 +144,7 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
                 timerIntervalRef.current = null;
             }
         };
-    }, [timerState.isActive, timerState.timeRemaining, studyDuration]);
+    }, [timerState.isActive, studyDuration]);
 
 
     const addQuizAnswer = useCallback((newAnswer: QuizAnswer) => {
@@ -265,21 +267,25 @@ export function StudySessionProvider({ children }: { children: ReactNode }) {
 
         // Save in background without blocking UI
         saveToDatabase();
-        
-        // Gamification: Add points for completing session using new system
-        const has2xPowerUp = powerUps.some(p => p.id === 'double-points' && p.active);
-        addStudySessionPoints(studyTimeInMinutes, true, has2xPowerUp);
-        
+
+        // Award quiz points (correct/wrong/reveal scoring from results page)
+        if (session.points !== 0) {
+            addPoints(session.points);
+        }
+
+        // Award study session time points separately
+        addStudySessionPoints(studyTimeInMinutes, true);
+
         // Update quest progress
         checkQuestProgress('quiz-5', 1);
-        checkQuestProgress('study-60', studyTimeInMinutes); // Use actual minutes studied
-        
+        checkQuestProgress('study-60', studyTimeInMinutes);
+
         // Increment streak
         incrementStreak();
-        
+
         // Add study time to total
         addStudyTime(studyTimeInMinutes);
-    }, [user, studyDuration, quizAnswers, addStudySessionPoints, checkQuestProgress, incrementStreak, addStudyTime, powerUps, getValidToken, quizQuestions]);
+    }, [user, studyDuration, quizAnswers, addStudySessionPoints, addPoints, checkQuestProgress, incrementStreak, addStudyTime, getValidToken, quizQuestions]);
 
     // Sync timer duration with study duration
     useEffect(() => {

@@ -159,47 +159,47 @@ export function StreakCalendar() {
               <div className="flex items-center gap-3">
                 <Zap className="h-5 w-5 text-orange-500" />
                 <div>
-                  <h3 className="font-medium">3-Day Streak</h3>
-                  <p className="text-xs text-muted-foreground">Study for 3 days in a row</p>
+                  <h3 className="font-medium">Warm-Up</h3>
+                  <p className="text-xs text-muted-foreground">Three days running</p>
                 </div>
               </div>
               <Badge variant={streak >= 3 ? 'default' : 'secondary'}>
                 {streak >= 3 ? 'Achieved' : 'Pending'}
               </Badge>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
               <div className="flex items-center gap-3">
                 <Flame className="h-5 w-5 text-red-500" />
                 <div>
-                  <h3 className="font-medium">7-Day Streak</h3>
-                  <p className="text-xs text-muted-foreground">Study for a week straight</p>
+                  <h3 className="font-medium">Full Week</h3>
+                  <p className="text-xs text-muted-foreground">A solid week of studying</p>
                 </div>
               </div>
               <Badge variant={streak >= 7 ? 'default' : 'secondary'}>
                 {streak >= 7 ? 'Achieved' : 'Pending'}
               </Badge>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
               <div className="flex items-center gap-3">
                 <Medal className="h-5 w-5 text-purple-500" />
                 <div>
-                  <h3 className="font-medium">14-Day Streak</h3>
-                  <p className="text-xs text-muted-foreground">Two weeks of consistent study</p>
+                  <h3 className="font-medium">Fortnight</h3>
+                  <p className="text-xs text-muted-foreground">Two weeks without a miss</p>
                 </div>
               </div>
               <Badge variant={streak >= 14 ? 'default' : 'secondary'}>
                 {streak >= 14 ? 'Achieved' : 'Pending'}
               </Badge>
             </div>
-            
+
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
               <div className="flex items-center gap-3">
                 <Crown className="h-5 w-5 text-yellow-500" />
                 <div>
-                  <h3 className="font-medium">30-Day Streak</h3>
-                  <p className="text-xs text-muted-foreground">A full month of dedication</p>
+                  <h3 className="font-medium">Unstoppable</h3>
+                  <p className="text-xs text-muted-foreground">A full month — you earned this one</p>
                 </div>
               </div>
               <Badge variant={streak >= 30 ? 'default' : 'secondary'}>

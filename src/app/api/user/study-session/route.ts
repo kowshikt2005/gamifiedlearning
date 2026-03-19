@@ -4,23 +4,7 @@ import { StudySession } from '@/lib/models/user';
 import { QuizAnswer } from '@/lib/database-utils';
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
-import jwt from 'jsonwebtoken';
-
-async function getUserFromToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('No token provided');
-  }
-
-  const token = authHeader.substring(7);
-  const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'fallback-secret') as {
-    userId: string;
-    email: string;
-  };
-
-  return decoded.userId;
-}
+import { getUserStringIdFromRequest } from '@/lib/jwt-utils';
 
 async function getSessionCount(userId: string): Promise<number> {
   try {
@@ -39,7 +23,7 @@ async function getSessionCount(userId: string): Promise<number> {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserFromToken(request);
+    const userId = getUserStringIdFromRequest(request);
     const sessionData = await request.json();
 
     // Validate and sanitize input data
@@ -165,7 +149,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getUserFromToken(request);
+    const userId = getUserStringIdFromRequest(request);
     
     // Add performance timing
     const startTime = Date.now();

@@ -1,29 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GamificationService } from '@/lib/services/gamification-service';
-import jwt from 'jsonwebtoken';
-import { ObjectId } from 'mongodb';
+import { getUserIdFromRequest } from '@/lib/jwt-utils';
 import { QuizAnswer } from '@/lib/database-utils';
-
-async function getUserFromToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('No token provided');
-  }
-
-  const token = authHeader.substring(7);
-  const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'fallback-secret') as {
-    userId: string;
-    email: string;
-  };
-
-  return new ObjectId(decoded.userId);
-}
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserFromToken(request);
+    const userId = getUserIdFromRequest(request);
     const quizData = await request.json();
 
     const db = await getDatabase();
@@ -56,7 +39,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const userId = await getUserFromToken(request);
+    const userId = getUserIdFromRequest(request);
     const { sessionId, answers, timeSpent } = await request.json();
 
     const db = await getDatabase();
@@ -137,7 +120,7 @@ export async function PUT(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = await getUserFromToken(request);
+    const userId = getUserIdFromRequest(request);
     const url = new URL(request.url);
     const sessionId = url.searchParams.get('sessionId');
 

@@ -25,7 +25,6 @@ export default function QuizSessionPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [revealedAnswers, setRevealedAnswers] = useState<number[]>([]);
-    const [score, setScore] = useState(0);
 
     useEffect(() => {
         if (!taskInfo?.dataUri) {
@@ -69,22 +68,27 @@ export default function QuizSessionPage() {
     const currentQuestion = useMemo(() => quizQuestions?.[currentQuestionIndex], [quizQuestions, currentQuestionIndex]);
     const selectedAnswer = useMemo(() => getAnswerForQuestion(currentQuestionIndex), [currentQuestionIndex, getAnswerForQuestion]);
 
-    const handleNext = useCallback(() => {
-        // Check if answer is correct before moving to next question
-        if (currentQuestion && selectedAnswer) {
-            if (selectedAnswer === currentQuestion.answer) {
-                setScore(prev => prev + 1);
-                // Don't add points here - will be calculated in results page
+    // Compute score from all submitted answers (updates correctly when answers change)
+    const score = useMemo(() => {
+        if (!quizQuestions) return 0;
+        let correct = 0;
+        for (let i = 0; i <= currentQuestionIndex; i++) {
+            const answer = getAnswerForQuestion(i);
+            if (answer && quizQuestions[i] && answer === quizQuestions[i].answer) {
+                correct++;
             }
         }
-        
+        return correct;
+    }, [quizQuestions, currentQuestionIndex, getAnswerForQuestion]);
+
+    const handleNext = useCallback(() => {
         if (quizQuestions && currentQuestionIndex < quizQuestions.length - 1) {
             setCurrentQuestionIndex(prev => prev + 1);
         } else if (quizQuestions) {
             // Quiz completed - move to results
             router.push(`/dashboard/session/${params.sessionId}/results`);
         }
-    }, [currentQuestion, selectedAnswer, currentQuestionIndex, quizQuestions, router, params.sessionId]);
+    }, [currentQuestionIndex, quizQuestions, router, params.sessionId]);
 
     const handlePrev = useCallback(() => {
         if (currentQuestionIndex > 0) {
@@ -95,20 +99,23 @@ export default function QuizSessionPage() {
     const handleRevealAnswer = useCallback(() => {
         if (coinsUsed >= 3) {
             toast({
-                title: "No More Hints Available! 🚫",
+                title: "No More Hints Available!",
                 description: "You've used all 3 available hints for this quiz.",
                 variant: "destructive",
             });
             return;
         }
-        
+
+        const success = useCoin();
+        if (!success) return;
+
         setRevealedAnswers(prev => [...prev, currentQuestionIndex]);
-        
+
         toast({
-            title: "Answer Revealed! 💡",
-            description: "The correct answer is now highlighted. (-10 points)",
+            title: "Answer Revealed!",
+            description: `The correct answer is now highlighted. (-10 points) ${2 - coinsUsed} hints remaining.`,
         });
-    }, [currentQuestionIndex, toast]);
+    }, [currentQuestionIndex, toast, coinsUsed, useCoin]);
 
     const isAnswerRevealed = useMemo(() => revealedAnswers.includes(currentQuestionIndex), [revealedAnswers, currentQuestionIndex]);
 

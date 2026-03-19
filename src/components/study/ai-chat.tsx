@@ -25,7 +25,7 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
     const { points, addPoints, checkQuestProgress } = useGamification();
     const { timerState } = useStudySession();
     const [messages, setMessages] = useState<Message[]>([
-        { role: 'bot', content: "Hello! I'm your AI Study Master 🧠✨ Ask me anything about the document!" }
+        { role: 'bot', content: "Hey there! Ask me anything about the document and I'll help you out." }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -111,7 +111,7 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
                     const pointsEarned = 5 + Math.floor(answer.length / 100); // Bonus points for longer responses
                     addPoints(pointsEarned);
                     questionCountRef.current += 1;
-                    checkQuestProgress('chat-10', 1);
+                    checkQuestProgress('ai-chat-10', 1);
                     
                     // Update streak
                     setStreak(prev => prev + 1);
@@ -180,7 +180,7 @@ export const AIChat = memo(function AIChat({ pdfDataUri }: AIChatProps) {
                         <MessageSquare className="h-6 w-6 text-primary animate-pulse" />
                         <Sparkles className="h-3 w-3 text-yellow-500 absolute -top-1 -right-1 animate-pulse" />
                     </div>
-                    <CardTitle className="font-headline text-xl">AI Study Master</CardTitle>
+                    <CardTitle className="font-headline text-xl">Study Chat</CardTitle>
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Timer Status Indicator */}

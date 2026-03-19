@@ -8,7 +8,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 // Removed unused import                                                                  
 export const metadata: Metadata = {
   title: 'StudyMaster AI',
-  description: 'AI-powered gamified learning platform',
+  description: 'A gamified learning platform that makes studying actually fun',
 };
 
 export default function RootLayout({

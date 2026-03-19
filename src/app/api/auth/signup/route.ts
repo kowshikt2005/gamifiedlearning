@@ -21,10 +21,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate password strength (at least 6 characters)
-    if (password.length < 6) {
+    // Validate password strength (at least 8 characters, matching client-side validation)
+    if (password.length < 8) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters long' },
+        { error: 'Password must be at least 8 characters long' },
         { status: 400 }
       );
     }
@@ -45,10 +45,11 @@ export async function POST(request: NextRequest) {
       throw new Error('User ID not found');
     }
 
-    // Set cookie with token
+    // Set cookie with token — strip password hash from response
+    const { password: _pw, ...safeUser } = user;
     const response = NextResponse.json({
       success: true,
-      user: user, // Return complete user object with progress
+      user: safeUser,
       token,
     });
 
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: '/',
     });

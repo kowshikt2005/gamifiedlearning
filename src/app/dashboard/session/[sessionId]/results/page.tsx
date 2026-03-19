@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStudySession } from '@/contexts/study-session-context';
 import { useGamification } from '@/contexts/gamification-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ArrowRight, TrendingUp, Target, Star, Clock, CheckCircle, Trophy, Zap, Flame } from 'lucide-react';
+import { Loader2, ArrowRight, TrendingUp, Target, Star, Clock, CheckCircle, Trophy, Flame, Zap } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { analyzeQuizPerformance, type AnalyzeQuizPerformanceOutput } from '@/ai/flows/analyze-quiz-performance';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,11 +15,12 @@ export default function SessionResultsPage() {
     const router = useRouter();
     const params = useParams();
     const { taskInfo, quizQuestions, quizAnswers, coinsUsed, studyDuration, penaltyPoints, resetSession, addCompletedSession } = useStudySession();
-    const { points, level, streak, addPoints, completeChallenge } = useGamification();
+    const { points, level, streak, completeChallenge } = useGamification();
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
-    const [pointsAwarded, setPointsAwarded] = useState(false);
+    // Use a ref (not state) to synchronously guard against duplicate saves across effects
+    const sessionSavedRef = useRef(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -62,9 +63,9 @@ export default function SessionResultsPage() {
         }, 0);
     }, [quizQuestions, quizAnswers]);
     
-    // NEW COMPREHENSIVE SCORING SYSTEM
+    // Scoring: only count questions the user actually answered
     const correctAnswers = score;
-    const wrongAnswers = quizQuestions ? quizQuestions.length - score : 0;
+    const wrongAnswers = quizAnswers.length - score;
     
     const correctAnswerPoints = useMemo(() => correctAnswers * 5, [correctAnswers]); // +5 points per correct answer
     const wrongAnswerPenalty = useMemo(() => wrongAnswers * 1, [wrongAnswers]); // -1 point per wrong answer
@@ -74,33 +75,30 @@ export default function SessionResultsPage() {
         return correctAnswerPoints - wrongAnswerPenalty - revealPenalty - penaltyPoints;
     }, [correctAnswerPoints, wrongAnswerPenalty, revealPenalty, penaltyPoints]);
 
-    // Add points when final points are calculated (only once)
+    // Save session and award points exactly once using a synchronous ref guard.
+    // The ref prevents duplicate saves even if dependencies change across renders.
     useEffect(() => {
-        if (finalPoints !== 0 && !pointsAwarded && isClient) {
-            addPoints(finalPoints);
-            setPointsAwarded(true);
-            
+        if (!sessionSavedRef.current && isClient && quizQuestions && taskInfo && params.sessionId) {
+            sessionSavedRef.current = true;
+
+            // Save session (which also awards study-time points internally)
+            addCompletedSession({
+                id: params.sessionId as string,
+                taskName: taskInfo.name,
+                points: finalPoints
+            });
+
             // Check for perfect score challenge
-            if (quizQuestions && score === quizQuestions.length) {
+            if (score === quizQuestions.length) {
                 completeChallenge('perfect-score');
             }
-            
+
             // Check for speed demon challenge (quiz completed in under 5 minutes)
             if (studyDuration < 300) {
                 completeChallenge('speed-demon');
             }
         }
-    }, [finalPoints, addPoints, quizQuestions, score, studyDuration, completeChallenge, pointsAwarded, isClient]);
-
-    useEffect(() => {
-        if(taskInfo && params.sessionId && !pointsAwarded) {
-            addCompletedSession({
-                id: params.sessionId as string,
-                taskName: taskInfo.name,
-                points: finalPoints
-            })
-        }
-    }, [taskInfo, params.sessionId, finalPoints, addCompletedSession, pointsAwarded])
+    }, [isClient, quizQuestions, taskInfo, params.sessionId, finalPoints, score, studyDuration, addCompletedSession, completeChallenge]);
 
     const formatDuration = useCallback((seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -149,16 +147,16 @@ export default function SessionResultsPage() {
             
             <Card className="shadow-lg gamify-card">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-3xl font-headline">Excellent Work!</CardTitle>
+                    <CardTitle className="text-3xl font-headline">Session Complete!</CardTitle>
                     <CardDescription>Here&apos;s a summary of your study session for &apos;{taskInfo?.name || 'your document'}&apos;</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
                         <Card className="gamify-card">
                             <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Clock className="h-4 w-4"/>Study Time</CardTitle></CardHeader>
                             <CardContent><p className="text-2xl font-bold">{formatDuration(studyDuration)}</p></CardContent>
                         </Card>
-                         <Card className="gamify-card">
+                        <Card className="gamify-card">
                             <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><CheckCircle className="h-4 w-4"/>Quiz Score</CardTitle></CardHeader>
                             <CardContent>
                                 <p className="text-2xl font-bold">{score} / {quizQuestions.length}</p>
@@ -166,12 +164,12 @@ export default function SessionResultsPage() {
                             </CardContent>
                         </Card>
                         <Card className="gamify-card">
-                            <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Zap className="h-4 w-4"/>XP Gained</CardTitle></CardHeader>
-                            <CardContent><p className="text-2xl font-bold text-blue-600">{Math.floor(finalPoints * 1.5)}</p></CardContent>
-                        </Card>
-                         <Card className="gamify-card">
                             <CardHeader><CardTitle className="flex items-center justify-center gap-2 text-base font-medium"><Star className="h-4 w-4"/>Points Earned</CardTitle></CardHeader>
-                            <CardContent><p className="text-2xl font-bold text-accent">{finalPoints > 0 ? `+${finalPoints}`: finalPoints}</p></CardContent>
+                            <CardContent>
+                                <p className={`text-2xl font-bold ${finalPoints >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {finalPoints >= 0 ? `+${finalPoints}` : finalPoints}
+                                </p>
+                            </CardContent>
                         </Card>
                     </div>
 
@@ -185,32 +183,32 @@ export default function SessionResultsPage() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex justify-between items-center">
-                                <span>Correct Answers ({correctAnswers} × 5 points)</span>
+                                <span>Correct Answers ({correctAnswers} × 5 pts)</span>
                                 <span className="font-bold text-green-600">+{correctAnswerPoints}</span>
                             </div>
                             {wrongAnswers > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>Wrong Answers ({wrongAnswers} × -1 point)</span>
+                                    <span>Wrong Answers ({wrongAnswers} × -1 pt)</span>
                                     <span className="font-bold text-red-600">-{wrongAnswerPenalty}</span>
                                 </div>
                             )}
                             {coinsUsed > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>Answer Reveals ({coinsUsed} × -10 points)</span>
+                                    <span>Hints Used ({coinsUsed} × -10 pts)</span>
                                     <span className="font-bold text-red-600">-{revealPenalty}</span>
                                 </div>
                             )}
                             {penaltyPoints > 0 && (
                                 <div className="flex justify-between items-center">
-                                    <span>Early Session End Penalty</span>
+                                    <span>Early Finish Penalty</span>
                                     <span className="font-bold text-red-600">-{penaltyPoints}</span>
                                 </div>
                             )}
                             <Separator />
                             <div className="flex justify-between items-center text-lg font-bold">
-                                <span>Total Points</span>
-                                <span className={finalPoints > 0 ? "text-green-600" : "text-red-600"}>
-                                    {finalPoints > 0 ? `+${finalPoints}` : finalPoints}
+                                <span>Quiz Points</span>
+                                <span className={finalPoints >= 0 ? "text-green-600" : "text-red-600"}>
+                                    {finalPoints >= 0 ? `+${finalPoints}` : finalPoints}
                                 </span>
                             </div>
                         </CardContent>

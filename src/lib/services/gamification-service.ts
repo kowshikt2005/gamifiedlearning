@@ -149,7 +149,7 @@ export class GamificationService {
       points: 0,
       streak: 0,
       quizAccuracy: 0,
-      dailyGoal: 500, // 500 points per day
+      dailyGoal: 30, // 30 minutes per day (matching client default)
       totalStudyTime: 0,
       badges: this.getDefaultBadges(),
       achievements: this.getDefaultAchievements(),
@@ -207,18 +207,21 @@ export class GamificationService {
     // Calculate level based on points and completed tasks/quests
     const newLevel = this.calculateLevel(newPoints, stats.quests);
     
-    // Update streak logic
+    // Update streak logic using UTC calendar days to avoid timezone issues
     const today = new Date();
+    const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const lastStudyDate = stats.lastStudyDate;
     let newStreak = stats.streak;
-    
+
     if (lastStudyDate) {
-      const daysDiff = Math.floor((today.getTime() - lastStudyDate.getTime()) / (1000 * 60 * 60 * 24));
+      const lastUTC = Date.UTC(lastStudyDate.getUTCFullYear(), lastStudyDate.getUTCMonth(), lastStudyDate.getUTCDate());
+      const daysDiff = Math.round((todayUTC - lastUTC) / (1000 * 60 * 60 * 24));
       if (daysDiff === 1) {
         newStreak += 1; // Continue streak
       } else if (daysDiff > 1) {
         newStreak = 1; // Reset streak
       }
+      // daysDiff === 0 means same day, keep streak unchanged
     } else {
       newStreak = 1; // First study session
     }
@@ -273,18 +276,20 @@ export class GamificationService {
   }
 
   /**
-   * Calculate level based on points and completed quests/tasks
+   * Calculate level from points using the unified progressive formula.
+   * Level 2 = 100pts, Level 3 = 250pts (100+150), Level 4 = 450pts (100+150+200), etc.
    */
-  private static calculateLevel(points: number, quests: Quest[]): number {
-    const completedQuests = quests.filter(q => q.completed).length;
-    
-    // Base level from points (every 100 points = 1 level)
-    const pointsLevel = Math.floor(points / 100);
-    
-    // Bonus levels from completed quests (every 2 quests = 1 bonus level)
-    const questBonus = Math.floor(completedQuests / 2);
-    
-    return Math.max(1, pointsLevel + questBonus);
+  private static calculateLevel(points: number, _quests: Quest[]): number {
+    if (points < 100) return 1;
+    let currentLevel = 1;
+    let pointsUsed = 0;
+    let pointsForNextLevel = 100;
+    while (pointsUsed + pointsForNextLevel <= points) {
+      pointsUsed += pointsForNextLevel;
+      currentLevel++;
+      pointsForNextLevel = 100 + (currentLevel - 1) * 50;
+    }
+    return currentLevel;
   }
 
   /**
@@ -329,33 +334,33 @@ export class GamificationService {
 
       switch (quest.id) {
         case 'study-60':
-          // Hour Master: Study for 60 minutes total
+          // The Long Haul: Study for 60 minutes total
           if (actions.studyTime) {
             progressToAdd = actions.studyTime;
           }
           break;
-        
+
         case 'quiz-5':
-          // Quiz Master: Complete 5 quizzes
+          // Five for Five: Complete 5 quizzes
           if (actions.quizCompleted) {
             progressToAdd = 1;
           }
           break;
-        
+
         case 'ai-chat-10':
-          // Chat Champion: Ask 10 questions to AI tutor
+          // Curious Mind: Ask 10 questions in chat
           if (actions.aiQuestionsAsked) {
             progressToAdd = actions.aiQuestionsAsked;
           }
           break;
-        
+
         case 'streak-30':
-          // Monthly Streak: Maintain a 30-day study streak
+          // No Days Off: Keep a 30-day study streak
           progressToAdd = stats.streak > quest.progress ? 1 : 0;
           break;
-        
+
         case 'daily-goal-7':
-          // Daily Goal Master: Meet daily goal for 7 days
+          // Creature of Habit: Hit daily goal for 7 days
           if (actions.dailyGoalMet) {
             progressToAdd = 1;
           }
@@ -379,7 +384,7 @@ export class GamificationService {
   }
 
   /**
-   * Track AI questions asked for Chat Champion quest
+   * Track chat questions asked for Curious Mind quest
    */
   static async trackAIQuestion(userId: ObjectId): Promise<void> {
     const stats = await this.getUserStats(userId);
@@ -570,34 +575,34 @@ export class GamificationService {
   // Helper methods
   private static getDefaultBadges(): Badge[] {
     return [
-      { id: 'first-quiz', name: 'First Quiz', description: 'Complete your first quiz', icon: '🎓', earned: false, rarity: 'common' },
-      { id: 'streak-7', name: 'Week Streak', description: 'Study for 7 days in a row', icon: '🔥', earned: false, rarity: 'rare' },
-      { id: 'points-100', name: 'Centurion', description: 'Earn 100 points', icon: '💯', earned: false, rarity: 'common' },
-      { id: 'perfect-score', name: 'Perfect Score', description: 'Get 100% on a quiz', icon: '🏆', earned: false, rarity: 'rare' },
-      { id: 'early-bird', name: 'Early Bird', description: 'Study before 8 AM', icon: '🐦', earned: false, rarity: 'common' },
-      { id: 'night-owl', name: 'Night Owl', description: 'Study after 10 PM', icon: '🦉', earned: false, rarity: 'common' },
-      { id: 'speed-demon', name: 'Speed Demon', description: 'Finish a quiz in under 5 minutes', icon: '⚡', earned: false, rarity: 'epic' },
-      { id: 'scholar', name: 'Scholar', description: 'Complete 10 quizzes', icon: '📚', earned: false, rarity: 'epic' },
+      { id: 'first-quiz', name: 'Pop Quiz!', description: 'Took your first quiz', icon: '🎓', earned: false, rarity: 'common' },
+      { id: 'streak-7', name: 'On a Roll', description: 'Kept a 7-day study streak', icon: '🔥', earned: false, rarity: 'rare' },
+      { id: 'points-100', name: 'Centurion', description: 'Racked up 100 points', icon: '💯', earned: false, rarity: 'common' },
+      { id: 'perfect-score', name: 'Flawless', description: 'Aced a quiz with 100%', icon: '🏆', earned: false, rarity: 'rare' },
+      { id: 'early-bird', name: 'Early Bird', description: 'Hit the books before 8 AM', icon: '🐦', earned: false, rarity: 'common' },
+      { id: 'night-owl', name: 'Night Owl', description: 'Burned the midnight oil past 10 PM', icon: '🦉', earned: false, rarity: 'common' },
+      { id: 'speed-demon', name: 'Quick Draw', description: 'Blazed through a quiz in under 5 minutes', icon: '⚡', earned: false, rarity: 'epic' },
+      { id: 'scholar', name: 'Bookworm', description: 'Knocked out 10 quizzes', icon: '📚', earned: false, rarity: 'epic' },
     ];
   }
 
   private static getDefaultAchievements(): Achievement[] {
     return [
-      { id: 'first-session', name: 'First Session', description: 'Complete your first study session', icon: '🎯', earned: false, points: 10 },
-      { id: 'marathon-study', name: 'Marathon Study', description: 'Study for 2 hours in one session', icon: '🏃', earned: false, points: 50 },
-      { id: 'consistent-week', name: 'Consistent Week', description: 'Study every day for a week', icon: '📅', earned: false, points: 75 },
-      { id: 'quiz-expert', name: 'Quiz Expert', description: 'Score 90% or higher on 5 quizzes', icon: '📝', earned: false, points: 100 },
-      { id: 'point-master', name: 'Point Master', description: 'Earn 1000 total points', icon: '⭐', earned: false, points: 200 },
+      { id: 'first-session', name: 'Off the Bench', description: 'Completed your first study session', icon: '🎯', earned: false, points: 10 },
+      { id: 'marathon-study', name: 'Deep Focus', description: 'Studied for 2 hours straight', icon: '🏃', earned: false, points: 50 },
+      { id: 'consistent-week', name: 'Clockwork', description: 'Studied every day for a full week', icon: '📅', earned: false, points: 75 },
+      { id: 'quiz-expert', name: 'Honor Roll', description: 'Scored 90%+ on 5 quizzes', icon: '📝', earned: false, points: 100 },
+      { id: 'point-master', name: 'High Roller', description: 'Earned 1000 total points', icon: '⭐', earned: false, points: 200 },
     ];
   }
 
   private static getDefaultQuests(): Quest[] {
     return [
-      { id: 'study-60', name: 'Hour Master', description: 'Study for 60 minutes total', icon: '⏱️', progress: 0, target: 60, reward: 50, completed: false, category: 'study' },
-      { id: 'quiz-5', name: 'Quiz Master', description: 'Complete 5 quizzes', icon: '📝', progress: 0, target: 5, reward: 75, completed: false, category: 'quiz' },
-      { id: 'ai-chat-10', name: 'Chat Champion', description: 'Ask 10 questions to AI tutor', icon: '💬', progress: 0, target: 10, reward: 40, completed: false, category: 'ai' },
-      { id: 'streak-30', name: 'Monthly Streak', description: 'Maintain a 30-day study streak', icon: '📅', progress: 0, target: 30, reward: 150, completed: false, category: 'consistency' },
-      { id: 'daily-goal-7', name: 'Goal Achiever', description: 'Meet daily goal for 7 days', icon: '🎯', progress: 0, target: 7, reward: 100, completed: false, category: 'consistency' },
+      { id: 'study-60', name: 'The Long Haul', description: 'Study for 60 minutes total', icon: '⏱️', progress: 0, target: 60, reward: 50, completed: false, category: 'study' },
+      { id: 'quiz-5', name: 'Five for Five', description: 'Complete 5 quizzes', icon: '📝', progress: 0, target: 5, reward: 75, completed: false, category: 'quiz' },
+      { id: 'ai-chat-10', name: 'Curious Mind', description: 'Ask 10 questions in chat', icon: '💬', progress: 0, target: 10, reward: 40, completed: false, category: 'chat' },
+      { id: 'streak-30', name: 'No Days Off', description: 'Keep a 30-day study streak', icon: '📅', progress: 0, target: 30, reward: 150, completed: false, category: 'consistency' },
+      { id: 'daily-goal-7', name: 'Creature of Habit', description: 'Hit your daily goal for 7 days', icon: '🎯', progress: 0, target: 7, reward: 100, completed: false, category: 'consistency' },
     ];
   }
 
@@ -731,9 +736,9 @@ export class GamificationService {
 
   private static getPowerUpName(type: string): string {
     switch (type) {
-      case 'points': return 'Points Booster';
-      case 'time': return 'Time Extender';
-      case 'streak': return 'Streak Protector';
+      case 'points': return 'Score Multiplier';
+      case 'time': return 'Overtime Boost';
+      case 'streak': return 'Safety Net';
       default: return 'Unknown Power-up';
     }
   }

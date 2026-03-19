@@ -189,22 +189,22 @@ export function ChallengeCenter() {
             <div className="flex items-start gap-3">
               <Medal className="h-5 w-5 text-primary mt-0.5" />
               <div>
-                <h3 className="font-medium">Start with Easy Challenges</h3>
-                <p className="text-sm text-muted-foreground">Build momentum by completing easier challenges first.</p>
+                <h3 className="font-medium">Start Small</h3>
+                <p className="text-sm text-muted-foreground">Build momentum with easier challenges first.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Flame className="h-5 w-5 text-orange-500 mt-0.5" />
               <div>
-                <h3 className="font-medium">Focus on One Challenge</h3>
-                <p className="text-sm text-muted-foreground">Concentrate on completing one challenge at a time for better results.</p>
+                <h3 className="font-medium">One at a Time</h3>
+                <p className="text-sm text-muted-foreground">You&apos;ll get better results focusing on a single challenge.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Star className="h-5 w-5 text-yellow-500 mt-0.5" />
               <div>
-                <h3 className="font-medium">Track Your Progress</h3>
-                <p className="text-sm text-muted-foreground">Regularly check your challenge completion stats to stay motivated.</p>
+                <h3 className="font-medium">Check In Often</h3>
+                <p className="text-sm text-muted-foreground">Stay motivated by keeping an eye on your stats.</p>
               </div>
             </div>
           </div>

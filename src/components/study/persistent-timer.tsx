@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Clock, Play, Pause, Square, RotateCcw, Timer, Zap } from 'lucide-react';
 import { useStudySession } from '@/contexts/study-session-context';
-import { useGamification } from '@/contexts/gamification-context';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/auth-context';
 
 interface PersistentTimerProps {
     onComplete?: (elapsedSeconds: number) => void;
@@ -16,96 +14,43 @@ interface PersistentTimerProps {
 }
 
 export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerProps) {
-    const { user, getValidToken } = useAuth();
     const { taskInfo, studyDuration, setStudyDuration, timerState, updateTimerState, resetTimer } = useStudySession();
-    const { addStudyTime, addPoints, incrementStreak, powerUps } = useGamification();
     const { toast } = useToast();
 
-    // Handle timer completion
+    // Track whether we've already fired completion for this session
+    const [completionFired, setCompletionFired] = useState(false);
+
+    // Reset completion flag when timer restarts
     useEffect(() => {
-        if (timerState.isActive && timerState.timeRemaining === 0) {
-            // Timer completed
+        if (timerState.isActive && timerState.timeRemaining > 0) {
+            setCompletionFired(false);
+        }
+    }, [timerState.isActive, timerState.timeRemaining]);
+
+    // Handle timer completion — uses <= 0 to avoid missing the exact 0 tick
+    useEffect(() => {
+        if (timerState.isActive && timerState.timeRemaining <= 0 && !completionFired) {
+            setCompletionFired(true);
+
+            // Stop the timer
             updateTimerState({
                 isActive: false,
                 isPaused: false,
             });
-            
+
             const minutesStudied = Math.floor(studyDuration / 60);
-            let pointsEarned = minutesStudied * 5; // NEW SYSTEM: 5 points per minute for completed session
-            
-            // Check for 2x power-up
-            const doublePointsActive = powerUps.some(p => p.id === 'double-points' && p.active);
-            if (doublePointsActive) {
-                pointsEarned *= 2; // Apply 2x multiplier
+
+            toast({
+                title: "Study Session Complete!",
+                description: `You studied for ${minutesStudied} minutes. Time for a quiz!`,
+            });
+
+            // Navigate to quiz immediately
+            if (onComplete) {
+                onComplete(studyDuration);
             }
-            
-            // Use setTimeout to ensure state updates happen after render
-            setTimeout(() => {
-                // Update gamification in next tick
-                addPoints(pointsEarned);
-                addStudyTime(minutesStudied);
-                incrementStreak();
-                
-                toast({
-                    title: "Study Session Complete! 🎉",
-                    description: `You studied for ${minutesStudied} minutes and earned ${pointsEarned} points!`,
-                });
-            }, 0);
-            
-            // Save session to database - but don't block completion flow
-            if (user && taskInfo) {
-                const saveSession = async () => {
-                    try {
-                        const token = getValidToken();
-                        if (!token) {
-                            console.warn('No valid auth token found, skipping database save');
-                            return;
-                        }
-
-                        const sessionData = {
-                            id: `study_${Date.now()}`,
-                            taskName: taskInfo.name,
-                            duration: minutesStudied,
-                            score: 100, // Full completion score
-                            points: pointsEarned,
-                            quizAnswers: [] // Empty for timer completion
-                        };
-
-                        // Saving timer completion session
-
-                        const response = await fetch('/api/user/study-session', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`,
-                            },
-                            body: JSON.stringify(sessionData),
-                        });
-
-                        if (response.ok) {
-                            await response.json();
-                            // Timer session saved successfully
-                        } else {
-                            const errorData = await response.text();
-                            console.error('Failed to save timer session:', response.status, errorData);
-                        }
-                    } catch (error) {
-                        console.error('Error saving timer session:', error);
-                    }
-                };
-
-                // Save in background
-                saveSession();
-            }
-            
-            // Call completion callback after a delay to ensure all state updates are done
-            setTimeout(() => {
-                if (onComplete) {
-                    onComplete(studyDuration);
-                }
-            }, 500);
         }
-    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, addPoints, addStudyTime, incrementStreak, user, taskInfo, toast, onComplete, getValidToken, powerUps]);
+    }, [timerState.isActive, timerState.timeRemaining, studyDuration, updateTimerState, toast, onComplete, completionFired]);
 
     // Start timer
     const handleStart = useCallback(() => {
@@ -162,65 +107,14 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
             });
             
             const minutesStudied = Math.floor(timerState.elapsedTime / 60);
-            // NEW SYSTEM: Early end penalty of -25 points
-            const partialPoints = -25;
-            
-            // Always apply penalty for early end, regardless of time studied
-            addPoints(partialPoints);
-            
+
+            // Note: Early finish penalty (-25) is applied via addPenalty in the session page,
+            // which feeds into penaltyPoints on the results page. No need to deduct here.
+
             if (minutesStudied > 0) {
-                // Still track study time even if ended early
-                addStudyTime(minutesStudied);
-                
-                // Save partial session to database - but don't block UI
-                if (user && taskInfo) {
-                    const savePartialSession = async () => {
-                        try {
-                            const token = getValidToken();
-                            if (!token) {
-                                console.warn('No valid auth token found, skipping partial session save');
-                                return;
-                            }
-
-                            const sessionData = {
-                                id: `study_partial_${Date.now()}`,
-                                taskName: `${taskInfo.name} (Early End)`,
-                                duration: minutesStudied,
-                                score: Math.floor((timerState.elapsedTime / studyDuration) * 100),
-                                points: partialPoints,
-                                quizAnswers: [] // Empty for early finish
-                            };
-
-                            // Saving partial session
-
-                            const response = await fetch('/api/user/study-session', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`,
-                                },
-                                body: JSON.stringify(sessionData),
-                            });
-
-                            if (response.ok) {
-                                await response.json();
-                                // Partial session saved successfully
-                            } else {
-                                const errorData = await response.text();
-                                console.error('Failed to save partial session:', response.status, errorData);
-                            }
-                        } catch (error) {
-                            console.error('Error saving partial session:', error);
-                        }
-                    };
-
-                    // Save in background
-                    savePartialSession();
-                }
-                
                 toast({
-                    title: "Study Session Ended Early 🛑",
-                    description: `You studied for ${minutesStudied} minutes but lost 25 points for ending early!`,
+                    title: "Study Session Ended Early",
+                    description: `You studied for ${minutesStudied} minutes. A 25 point penalty will be applied.`,
                     variant: "destructive",
                 });
             }
@@ -229,7 +123,7 @@ export function PersistentTimer({ onComplete, onEarlyFinish }: PersistentTimerPr
                 onEarlyFinish();
             }
         }
-    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, studyDuration, addPoints, addStudyTime, user, taskInfo, toast, onEarlyFinish, updateTimerState, getValidToken]);
+    }, [timerState.isActive, timerState.isPaused, timerState.elapsedTime, updateTimerState, toast, onEarlyFinish]);
 
     // Reset timer
     const handleReset = useCallback(() => {

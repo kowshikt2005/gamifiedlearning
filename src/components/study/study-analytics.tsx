@@ -206,7 +206,7 @@ export function StudyAnalytics() {
         <CardHeader>
           <CardTitle>Recent Study Sessions</CardTitle>
           <CardDescription>
-            Your latest study activities • Data synchronized with Progress tab
+            Your latest study sessions
           </CardDescription>
         </CardHeader>
         <CardContent>

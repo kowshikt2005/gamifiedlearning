@@ -78,7 +78,7 @@ export function ChallengeTracker() {
               </div>
             ))}
             {quests.filter(q => !q.completed).length === 0 && (
-              <p className="text-muted-foreground text-center py-4">No active quests. Complete challenges to unlock new ones!</p>
+              <p className="text-muted-foreground text-center py-4">No active quests right now.</p>
             )}
           </div>
         </CardContent>

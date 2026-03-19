@@ -35,7 +35,7 @@ export function useFlashcardGamification(): FlashcardGamificationHook {
 
   // Points system for flashcard actions
   const addFlashcardGenerationPoints = useCallback((flashcardCount: number) => {
-    // +3 points per flashcard generated (encouraging AI-powered learning)
+    // +3 points per flashcard generated
     const points = flashcardCount * 3;
     addPoints(points);
     return points;

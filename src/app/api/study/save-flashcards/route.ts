@@ -1,32 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
-import { Flashcard } from '@/lib/models/flashcard';
+import { getUserStringIdFromRequest } from '@/lib/jwt-utils';
+// Flashcard save request comes with {question, answer, status} fields (mapped from front/back by client hook)
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { flashcards, taskId, pdfTitle } = body;
 
-    // Get auth token from header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    
-    // For now, we'll use a simple token validation
-    // In production, you'd verify the JWT token properly
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    // Verify JWT and extract user ID
+    const userId = getUserStringIdFromRequest(request);
 
     // Validate input
     if (!flashcards || !Array.isArray(flashcards) || flashcards.length === 0) {
@@ -47,20 +31,20 @@ export async function POST(request: NextRequest) {
     const db = await getDatabase();
     
     // Prepare flashcards for saving
-    const flashcardsToSave = flashcards.map((card: Flashcard) => ({
+    // Client sends {question, answer, status} (already mapped from front/back in the hook)
+    const flashcardsToSave = flashcards.map((card: any) => ({
       _id: new ObjectId(),
       id: card.id,
-      question: card.front,
-      answer: card.back,
+      question: card.question || card.front,
+      answer: card.answer || card.back,
       pageNumber: card.pageNumber,
       sourceText: card.sourceText,
-      status: 'saved',
+      status: card.status || 'saved',
       taskId,
       pdfTitle,
-      userId: token, // Using token as userId for now
+      userId,
       createdAt: new Date(),
-      lastReviewed: new Date(),
-      reviewCount: 1,
+      reviewCount: 0,
     }));
 
     // Insert flashcards into database
@@ -85,31 +69,16 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get auth token from header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    // Verify JWT and extract user ID
+    const userId = getUserStringIdFromRequest(request);
 
     // Connect to database
     const db = await getDatabase();
-    
+
     // Fetch user's saved flashcards
     const flashcards = await db
       .collection('saved_flashcards')
-      .find({ userId: token })
+      .find({ userId })
       .sort({ createdAt: -1 })
       .toArray();
 
@@ -134,23 +103,8 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { flashcardId, status } = body;
 
-    // Get auth token from header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    // Verify JWT and extract user ID
+    const userId = getUserStringIdFromRequest(request);
 
     // Validate input
     if (!flashcardId || !status) {
@@ -165,9 +119,9 @@ export async function PUT(request: NextRequest) {
     
     // Update flashcard status
     const result = await db.collection('saved_flashcards').updateOne(
-      { 
+      {
         _id: new ObjectId(flashcardId),
-        userId: token 
+        userId
       },
       { 
         $set: { 
@@ -208,23 +162,8 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { flashcardIds } = body;
 
-    // Get auth token from header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.substring(7);
-    
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    // Verify JWT and extract user ID
+    const userId = getUserStringIdFromRequest(request);
 
     // Validate input
     if (!flashcardIds || !Array.isArray(flashcardIds) || flashcardIds.length === 0) {
@@ -241,7 +180,7 @@ export async function DELETE(request: NextRequest) {
     const objectIds = flashcardIds.map(id => new ObjectId(id));
     const result = await db.collection('saved_flashcards').deleteMany({
       _id: { $in: objectIds },
-      userId: token
+      userId
     });
 
     return NextResponse.json({

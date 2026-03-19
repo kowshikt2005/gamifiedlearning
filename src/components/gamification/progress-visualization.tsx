@@ -174,7 +174,7 @@ export function ProgressVisualization() {
           
           {/* Data Sync Indicator */}
           <div className="mt-2 text-xs text-muted-foreground text-center">
-            📊 Data synchronized with Analytics section • Real-time updates every 30s
+            Data synced with Analytics — hit Refresh to update
           </div>
         </CardContent>
       </Card>

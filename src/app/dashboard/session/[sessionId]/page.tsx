@@ -21,7 +21,7 @@ import { Flashcard } from '@/lib/models/flashcard';
 export default function StudySessionPage() {
     const router = useRouter();
     const params = useParams();
-    const { taskInfo, setTaskInfo, setStudyDuration, addPenalty } = useStudySession();
+    const { taskInfo, setTaskInfo, studyDuration, setStudyDuration, addPenalty, timerState } = useStudySession();
     const { points, level, streak } = useGamification();
     const { toast } = useToast();
     const [isClient, setIsClient] = useState(false);
@@ -47,14 +47,16 @@ export default function StudySessionPage() {
 
     const handleEarlyFinish = useCallback(() => {
         addPenalty(25); // 25 point penalty for ending session early
+        // Set actual elapsed time so results page shows correct study duration
+        setStudyDuration(timerState.elapsedTime);
         toast({
-            title: 'Session Ended Early ⚠️',
+            title: 'Session Ended Early',
             description: 'A 25 point penalty has been applied. Moving to quiz...',
             variant: 'destructive',
             className: "animate-shake"
         });
         router.push(`/dashboard/session/${params.sessionId}/quiz`);
-    }, [addPenalty, router, params.sessionId, toast]);
+    }, [addPenalty, setStudyDuration, timerState.elapsedTime, router, params.sessionId, toast]);
 
     const handleToggleView = useCallback(() => {
         if (currentView === 'pdf') {
@@ -77,8 +79,16 @@ export default function StudySessionPage() {
             if (storedData) {
                 try {
                     const parsedData = JSON.parse(storedData);
-                    setTaskInfo(parsedData.taskInfo);
-                    setStudyDuration(parsedData.studyDuration);
+                    // Support both formats: wrapped {taskInfo, studyDuration} and raw taskInfo
+                    if (parsedData.taskInfo) {
+                        setTaskInfo(parsedData.taskInfo);
+                        if (parsedData.studyDuration) setStudyDuration(parsedData.studyDuration);
+                    } else if (parsedData.name && parsedData.dataUri) {
+                        // Raw taskInfo object stored directly
+                        setTaskInfo(parsedData);
+                    } else {
+                        setError("Failed to load session data. Please start a new session.");
+                    }
                 } catch {
                     setError("Failed to load session data. Please start a new session.");
                 }
@@ -88,12 +98,16 @@ export default function StudySessionPage() {
             }
         }
     }, [taskInfo, setTaskInfo, setStudyDuration, params.sessionId]);
-    
+
     useEffect(() => {
         if(taskInfo){
-            sessionStorage.setItem(`session-${params.sessionId}`, JSON.stringify(taskInfo));
+            // Store in a consistent wrapped format so recovery reads both fields
+            sessionStorage.setItem(`session-${params.sessionId}`, JSON.stringify({
+                taskInfo,
+                studyDuration,
+            }));
         }
-    }, [taskInfo, params.sessionId]);
+    }, [taskInfo, studyDuration, params.sessionId]);
 
     useEffect(() => {
         if(error) {

@@ -16,7 +16,7 @@ import {
 } from '@/lib/models/flashcard';
 
 export class FlashcardService {
-  private static readonly COLLECTION_NAME = 'flashcards';
+  private static readonly COLLECTION_NAME = 'saved_flashcards';
 
   /**
    * Save flashcards to the database
