@@ -1,5 +1,6 @@
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { Header } from '@/components/layout/header';
+import { WallpaperBackground } from '@/components/layout/wallpaper-background';
 import { StudySessionProvider } from '@/contexts/study-session-context';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 
@@ -11,7 +12,7 @@ export default function DashboardLayout({
   return (
     <ProtectedRoute>
       <StudySessionProvider>
-        <div className="flex min-h-screen w-full flex-col bg-muted/40">
+        <WallpaperBackground>
           <AppSidebar />
           <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
             <Header />
@@ -19,7 +20,7 @@ export default function DashboardLayout({
               {children}
             </main>
           </div>
-        </div>
+        </WallpaperBackground>
       </StudySessionProvider>
     </ProtectedRoute>
   );

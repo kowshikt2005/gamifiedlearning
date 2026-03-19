@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/auth-context';
 import { GamificationProvider } from '@/contexts/gamification-context';
+import { ThemeProvider } from '@/contexts/theme-context';
 import { Analytics } from "@vercel/analytics/next";
 import { ErrorBoundary } from '@/components/error-boundary';
 // Removed unused import                                                                  
@@ -28,13 +29,15 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         <ErrorBoundary>
-          <AuthProvider>
-            <GamificationProvider>
-              {children}
-              <Toaster />
-              <Analytics />
-            </GamificationProvider>
-          </AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <GamificationProvider>
+                {children}
+                <Toaster />
+                <Analytics />
+              </GamificationProvider>
+            </AuthProvider>
+          </ThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

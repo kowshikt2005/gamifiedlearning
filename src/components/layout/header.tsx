@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 // Removed unused useRouter import
 import {
@@ -7,6 +8,7 @@ import {
   Search,
   BarChart2,
   PlusCircle,
+  Palette,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,15 +19,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Logo } from '../icons';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useAuth } from '@/contexts/auth-context';
+import { AppearanceSettings } from '@/components/settings/appearance-settings';
 
 export function Header() {
   const { user, logout } = useAuth();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const userAvatar = PlaceHolderImages.find(img => img.id === 'user-avatar') || {
     id: 'fallback',
     imageUrl: 'https://picsum.photos/seed/fallback/32/32',
@@ -114,9 +124,23 @@ export function Header() {
             {user?.username || 'My Account'}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setAppearanceOpen(true)}>
+            <Palette className="mr-2 h-4 w-4" />
+            Appearance
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Appearance</DialogTitle>
+          </DialogHeader>
+          <AppearanceSettings />
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

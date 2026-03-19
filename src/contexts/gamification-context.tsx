@@ -139,6 +139,83 @@ const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   { id: 'ai-learning-pioneer', name: 'Study Hacker', description: 'Generated 100 flashcards', icon: '🚀', earned: false, points: 150 },
 ];
 
+/**
+ * Merge DB data with code defaults: code is authoritative for metadata
+ * (name, description, icon, etc.), DB is authoritative for progress
+ * (earned, progress, completed, earnedAt, completedAt).
+ * Also adds any new items from defaults that don't exist in DB yet.
+ */
+function mergeBadges(dbBadges: Badge[], defaults: Badge[]): Badge[] {
+  const defaultMap = new Map(defaults.map(b => [b.id, b]));
+  const dbMap = new Map(dbBadges.map(b => [b.id, b]));
+
+  // Start with all defaults (ensures new badges are included)
+  const merged = defaults.map(def => {
+    const db = dbMap.get(def.id);
+    if (db) {
+      // Merge: code metadata + DB progress
+      return { ...def, earned: db.earned, ...(db.earnedAt && { earnedAt: db.earnedAt }) };
+    }
+    return def;
+  });
+
+  // Include any DB-only badges not in defaults (legacy)
+  for (const db of dbBadges) {
+    if (!defaultMap.has(db.id)) {
+      merged.push(db);
+    }
+  }
+
+  return merged;
+}
+
+function mergeQuests(dbQuests: Quest[], defaults: Quest[]): Quest[] {
+  const defaultMap = new Map(defaults.map(q => [q.id, q]));
+  const dbMap = new Map(dbQuests.map(q => [q.id, q]));
+
+  const merged = defaults.map(def => {
+    const db = dbMap.get(def.id);
+    if (db) {
+      return {
+        ...def,
+        progress: db.progress,
+        completed: db.completed,
+        ...(db.completedAt && { completedAt: db.completedAt }),
+      };
+    }
+    return def;
+  });
+
+  for (const db of dbQuests) {
+    if (!defaultMap.has(db.id)) {
+      merged.push(db);
+    }
+  }
+
+  return merged;
+}
+
+function mergeAchievements(dbAchievements: Achievement[], defaults: Achievement[]): Achievement[] {
+  const defaultMap = new Map(defaults.map(a => [a.id, a]));
+  const dbMap = new Map(dbAchievements.map(a => [a.id, a]));
+
+  const merged = defaults.map(def => {
+    const db = dbMap.get(def.id);
+    if (db) {
+      return { ...def, earned: db.earned, ...(db.earnedAt && { earnedAt: db.earnedAt }) };
+    }
+    return def;
+  });
+
+  for (const db of dbAchievements) {
+    if (!defaultMap.has(db.id)) {
+      merged.push(db);
+    }
+  }
+
+  return merged;
+}
+
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
 
 export function GamificationProvider({ children }: { children: ReactNode }) {
@@ -184,9 +261,10 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
       setCoins(0); // Reset coins for each session
       setTotalStudyTime(progress.totalStudyTime || 0);
       setDailyGoal(progress.dailyGoal || 30);
-      setBadges(progress.badges || DEFAULT_BADGES);
-      setQuests(progress.quests || DEFAULT_QUESTS);
-      setAchievements(progress.achievements || DEFAULT_ACHIEVEMENTS);
+      // Merge DB data with code defaults: code owns metadata, DB owns progress
+      setBadges(progress.badges ? mergeBadges(progress.badges, DEFAULT_BADGES) : DEFAULT_BADGES);
+      setQuests(progress.quests ? mergeQuests(progress.quests, DEFAULT_QUESTS) : DEFAULT_QUESTS);
+      setAchievements(progress.achievements ? mergeAchievements(progress.achievements, DEFAULT_ACHIEVEMENTS) : DEFAULT_ACHIEVEMENTS);
 
       // Calculate daily progress (today's study time)
       if (progress.studySessions) {
@@ -332,9 +410,10 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
           setStreak(progress.streak || 0);
           setTotalStudyTime(progress.totalStudyTime || 0);
           setDailyGoal(progress.dailyGoal || 30);
-          setBadges(progress.badges || DEFAULT_BADGES);
-          setQuests(progress.quests || DEFAULT_QUESTS);
-          setAchievements(progress.achievements || DEFAULT_ACHIEVEMENTS);
+          // Merge DB data with code defaults: code owns metadata, DB owns progress
+          setBadges(progress.badges ? mergeBadges(progress.badges, DEFAULT_BADGES) : DEFAULT_BADGES);
+          setQuests(progress.quests ? mergeQuests(progress.quests, DEFAULT_QUESTS) : DEFAULT_QUESTS);
+          setAchievements(progress.achievements ? mergeAchievements(progress.achievements, DEFAULT_ACHIEVEMENTS) : DEFAULT_ACHIEVEMENTS);
 
           return true;
         }
