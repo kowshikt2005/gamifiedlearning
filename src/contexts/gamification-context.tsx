@@ -566,18 +566,21 @@ export function GamificationProvider({ children }: { children: ReactNode }) {
     }
   }, [streak, earnBadge]);
 
-  // Power-up timer
+  // Power-up timer — only update state when a power-up actually expires
   useEffect(() => {
     const interval = setInterval(() => {
-      setPowerUps((prev: PowerUp[]) => prev.map((powerUp: PowerUp) => {
-        if (powerUp.active && powerUp.endTime) {
-          const now = new Date();
-          if (now >= powerUp.endTime) {
+      setPowerUps((prev: PowerUp[]) => {
+        const now = new Date();
+        let changed = false;
+        const next = prev.map((powerUp: PowerUp) => {
+          if (powerUp.active && powerUp.endTime && now >= powerUp.endTime) {
+            changed = true;
             return { ...powerUp, active: false, endTime: undefined };
           }
-        }
-        return powerUp;
-      }));
+          return powerUp;
+        });
+        return changed ? next : prev; // same reference = no re-render
+      });
     }, 1000);
 
     return () => clearInterval(interval);

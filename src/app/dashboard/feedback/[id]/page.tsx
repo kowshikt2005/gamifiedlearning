@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStudySession } from '@/contexts/study-session-context';
 import { useGamification } from '@/contexts/gamification-context';
@@ -19,6 +19,8 @@ export default function FeedbackPage() {
     const [isClient, setIsClient] = useState(false);
     const [analysis, setAnalysis] = useState<AnalyzeQuizPerformanceOutput | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(true);
+    const pointsAwardedRef = useRef(false);
+    const sessionSavedRef = useRef(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -75,35 +77,34 @@ export default function FeedbackPage() {
         return quizPoints + studyTimeBonus + perfectScoreBonus - coinPenalty - penaltyPoints;
     }, [quizPoints, studyTimeBonus, perfectScoreBonus, coinPenalty, penaltyPoints]);
 
-    // Add points when final points are calculated (only once)
+    // Add points and save session exactly once using ref guards
     useEffect(() => {
-        let hasAddedPoints = false;
-        
-        if (finalPoints !== 0 && !hasAddedPoints) {
+        if (!pointsAwardedRef.current && isClient && quizQuestions && finalPoints !== 0) {
+            pointsAwardedRef.current = true;
             addPoints(finalPoints);
-            hasAddedPoints = true;
-            
+
             // Check for perfect score challenge
-            if (quizQuestions && score === quizQuestions.length) {
+            if (score === quizQuestions.length) {
                 completeChallenge('perfect-score');
             }
-            
+
             // Check for speed demon challenge (quiz completed in under 5 minutes)
             if (studyDuration < 300) {
                 completeChallenge('speed-demon');
             }
         }
-    }, [finalPoints, addPoints, quizQuestions, score, studyDuration, completeChallenge]);
+    }, [isClient, finalPoints, addPoints, quizQuestions, score, studyDuration, completeChallenge]);
 
     useEffect(() => {
-        if(taskInfo && params.id) {
+        if (!sessionSavedRef.current && isClient && taskInfo && params.id) {
+            sessionSavedRef.current = true;
             addCompletedSession({
                 id: params.id as string,
                 taskName: taskInfo.name,
                 points: finalPoints
-            })
+            });
         }
-    }, [taskInfo, params.id, finalPoints, addCompletedSession])
+    }, [isClient, taskInfo, params.id, finalPoints, addCompletedSession]);
 
     const formatDuration = useCallback((seconds: number) => {
         const h = Math.floor(seconds / 3600);
